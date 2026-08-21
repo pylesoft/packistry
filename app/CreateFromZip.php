@@ -109,11 +109,12 @@ class CreateFromZip
             ? $createdVersion->archives()->where('shasum', $hash)->first()
             : null;
 
-        if (is_null($existingArchive)) {
-            $archivePath = $package->repository->archivePath(Str::uuid7()->toString().'.zip');
+        $archivePath = is_null($existingArchive)
+            ? $package->repository->archivePath(Str::uuid7()->toString().'.zip')
+            : $existingArchive->archive_path;
+
+        if (! Storage::disk()->exists($archivePath)) {
             Storage::disk()->put($archivePath, $contents);
-        } else {
-            $archivePath = $existingArchive->archive_path;
         }
 
         DB::transaction(function () use ($archivePath, $createdVersion, $currentOrder, $hash, $metadata, $package, $versionName): void {
