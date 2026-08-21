@@ -5,11 +5,16 @@ declare(strict_types=1);
 use App\Models\Package;
 use App\Models\Repository;
 use App\Models\Version;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 use function Pest\Laravel\assertDatabaseHas;
 
 it('backfills immutable revisions for existing version archives', function (): void {
+    if (DB::getDriverName() === 'mysql') {
+        $this->markTestSkipped('MySQL DDL implicitly commits RefreshDatabase transactions.');
+    }
+
     Schema::drop('version_archives');
 
     $repository = Repository::factory()->create();
