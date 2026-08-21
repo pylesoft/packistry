@@ -13,9 +13,11 @@ class DestroyPackage
     public function handle(Package $package): Package
     {
         $paths = $package->versions()
+            ->with('archives')
             ->get()
-            ->map(fn (Version $version) => $version->archive_path)
-            ->filter(fn (?string $path): bool => $path !== null)
+            ->flatMap(fn (Version $version) => $version->archivePaths())
+            ->unique()
+            ->values()
             ->toArray();
 
         dispatch(function () use ($paths): void {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\CreateFromZip;
 use App\Models\Package;
 use App\Models\Repository;
+use App\Models\VersionArchive;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -80,5 +81,25 @@ it('updates the package name when a newer version is imported after an older one
     } finally {
         @unlink($oldZip);
         @unlink($newZip);
+    }
+});
+
+it('reuses an existing immutable archive when the same version content is imported again', function (): void {
+    Storage::fake();
+
+    $repository = Repository::factory()->create();
+    $package = Package::factory()->for($repository)->create(['name' => 'vendor/package']);
+    $archive = makeComposerZip('vendor/package', 'dev-main');
+
+    try {
+        $createFromZip = app(CreateFromZip::class);
+        $first = $createFromZip->create($package, $archive, 'dev-main');
+        $second = $createFromZip->create($package, $archive, 'dev-main');
+
+        expect($second->is($first))->toBeTrue()
+            ->and(VersionArchive::query()->count())->toBe(1)
+            ->and(Storage::allFiles())->toHaveCount(1);
+    } finally {
+        @unlink($archive);
     }
 });

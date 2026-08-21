@@ -36,7 +36,7 @@ it('lists package versions', function (Repository $repository, ?Authenticatable 
                         'time' => $version->created_at,
                         'dist' => [
                             'type' => 'zip',
-                            'url' => $package->repository->url("/$package->name/$version->name"),
+                            'url' => $package->repository->archiveUrl($package->name, $version->name, $version->shasum),
                             'shasum' => $version->shasum,
                         ],
                     ])->toArray()),
@@ -87,7 +87,7 @@ it('lists package versions when name includes dots', function (Repository $repos
                         'time' => $version->created_at,
                         'dist' => [
                             'type' => 'zip',
-                            'url' => $package->repository->url("/$package->name/$version->name"),
+                            'url' => $package->repository->archiveUrl($package->name, $version->name, $version->shasum),
                             'shasum' => $version->shasum,
                         ],
                     ])->toArray()),

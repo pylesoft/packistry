@@ -97,9 +97,7 @@ abstract readonly class WebhookController extends Controller
             ->where('name', Normalizer::version($event->version()))
             ->firstOrFail();
 
-        if ($version->archive_path !== null) {
-            Storage::disk()->delete($version->archive_path);
-        }
+        Storage::disk()->delete($version->archivePaths()->all());
 
         $version->delete();
 

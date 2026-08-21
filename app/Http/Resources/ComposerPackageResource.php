@@ -31,7 +31,7 @@ class ComposerPackageResource extends JsonResource
                 'time' => $version->created_at,
                 'dist' => [
                     'type' => 'zip',
-                    'url' => $this->repository->url("/$this->name/$version->name"),
+                    'url' => $this->repository->archiveUrl($this->name, $version->name, $version->shasum),
                     'shasum' => $version->shasum,
                 ],
             ])

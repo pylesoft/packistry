@@ -34,7 +34,7 @@ it('lists package versions', function (Repository $repository, ?Authenticatable 
                         'time' => $version->created_at,
                         'dist' => [
                             'type' => 'zip',
-                            'url' => $repository->url("/$package->name/$version->name"),
+                            'url' => $repository->archiveUrl($package->name, $version->name, $version->shasum),
                             'shasum' => $version->shasum,
                         ],
                     ])->toArray()),

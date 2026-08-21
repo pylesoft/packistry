@@ -181,7 +181,17 @@ class RepositoryController extends RepositoryAwareController
             ->where('name', Normalizer::version($versionName))
             ->firstOrFail();
 
-        if ($version->archive_path === null || ! Storage::exists($version->archive_path)) {
+        $shasum = $request->query('shasum');
+
+        if (is_array($shasum)) {
+            abort(404);
+        }
+
+        $archivePath = is_string($shasum)
+            ? $version->archives()->where('shasum', $shasum)->value('archive_path')
+            : $version->archive_path;
+
+        if (! is_string($archivePath) || ! Storage::exists($archivePath)) {
             abort(404);
         }
 
@@ -192,7 +202,7 @@ class RepositoryController extends RepositoryAwareController
             token: $this->token()?->currentAccessToken()
         ));
 
-        return Storage::download($version->archive_path);
+        return Storage::download($archivePath);
     }
 
     public function upload(Request $request): JsonResponse
