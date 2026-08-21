@@ -65,6 +65,13 @@ class Repository extends Model
         return $prefix.basename($file);
     }
 
+    public function archiveUrl(string $package, string $version, string $shasum): string
+    {
+        return $this->url("/$package/$version").'?'.http_build_query([
+            'shasum' => $shasum,
+        ]);
+    }
+
     public function packageByName(string $name): ?Package
     {
         /** @var Package|null $package */

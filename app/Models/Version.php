@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection as SupportCollection;
 use Override;
 
 /**
@@ -32,6 +33,7 @@ use Override;
  * @property-read Collection<int, Download> $downloads
  * @property-read int|null $downloads_count
  * @property-read Package $package
+ * @property-read Collection<int, VersionArchive> $archives
  *
  * @method static VersionFactory factory($count = null, $state = [])
  * @method static Builder<static>|Version newModelQuery()
@@ -72,6 +74,30 @@ class Version extends Model
     public function downloads(): HasMany
     {
         return $this->hasMany(Download::class);
+    }
+
+    /**
+     * @return HasMany<VersionArchive, $this>
+     */
+    public function archives(): HasMany
+    {
+        return $this->hasMany(VersionArchive::class);
+    }
+
+    /**
+     * @return SupportCollection<int, string>
+     */
+    public function archivePaths(): SupportCollection
+    {
+        $paths = $this->relationLoaded('archives')
+            ? $this->archives->pluck('archive_path')
+            : $this->archives()->pluck('archive_path');
+
+        return $paths
+            ->push($this->archive_path)
+            ->filter()
+            ->unique()
+            ->values();
     }
 
     #[Override]

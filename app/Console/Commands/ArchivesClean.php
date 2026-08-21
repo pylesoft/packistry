@@ -21,7 +21,7 @@ class ArchivesClean extends Command
         $dryRun = $this->option('dry-run');
 
         $repositories = Repository::query()
-            ->with('packages.versions')
+            ->with('packages.versions.archives')
             ->get();
 
         $deleted = 0;
@@ -31,10 +31,9 @@ class ArchivesClean extends Command
 
             $expectedPaths = $repository->packages
                 ->map(fn (Package $package) => $package->setRelation('repository', $repository))
-                ->flatMap(fn (Package $package) => $package->versions->map(
-                    fn (Version $version) => $version->archive_path
+                ->flatMap(fn (Package $package) => $package->versions->flatMap(
+                    fn (Version $version) => $version->archivePaths()
                 ))
-                ->filter(fn (?string $path) => $path !== null)
                 ->flip();
 
             $files = Storage::disk()->files($repository->path);

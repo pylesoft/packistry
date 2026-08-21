@@ -12,6 +12,7 @@ use App\Exceptions\VersionNotFoundException;
 use App\Models\Package;
 use App\Models\Version;
 use App\Traits\ComposerFromZip;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -63,12 +64,7 @@ class CreateFromZip
             throw new RuntimeException('failed to calculate hash');
         }
 
-        $createdVersion->package_id = $package->id;
-        $createdVersion->name = $versionName;
-        $createdVersion->order = $currentOrder;
-        $createdVersion->shasum = $hash;
-        $createdVersion->archive_path = $package->repository->archivePath(Str::uuid7()->toString().'.zip');
-        $createdVersion->metadata = collect($decoded)->only([
+        $metadata = collect($decoded)->only([
             'description',
             'readme',
             'keywords',
@@ -106,15 +102,34 @@ class CreateFromZip
             'non-feature-branches',
         ])->toArray();
 
-        $createdVersion->save();
-
         /** @var string $contents */
         $contents = file_get_contents($path);
 
-        Storage::disk()->put(
-            path: $createdVersion->archive_path,
-            contents: $contents
-        );
+        $existingArchive = $createdVersion->exists
+            ? $createdVersion->archives()->where('shasum', $hash)->first()
+            : null;
+
+        if (is_null($existingArchive)) {
+            $archivePath = $package->repository->archivePath(Str::uuid7()->toString().'.zip');
+            Storage::disk()->put($archivePath, $contents);
+        } else {
+            $archivePath = $existingArchive->archive_path;
+        }
+
+        DB::transaction(function () use ($archivePath, $createdVersion, $currentOrder, $hash, $metadata, $package, $versionName): void {
+            $createdVersion->package_id = $package->id;
+            $createdVersion->name = $versionName;
+            $createdVersion->order = $currentOrder;
+            $createdVersion->shasum = $hash;
+            $createdVersion->archive_path = $archivePath;
+            $createdVersion->metadata = $metadata;
+            $createdVersion->save();
+
+            $createdVersion->archives()->firstOrCreate(
+                ['shasum' => $hash],
+                ['archive_path' => $archivePath]
+            );
+        });
 
         return $createdVersion;
     }
