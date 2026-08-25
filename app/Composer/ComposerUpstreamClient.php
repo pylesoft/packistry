@@ -7,6 +7,7 @@ namespace App\Composer;
 use App\Enums\ComposerUpstreamAuthType;
 use App\Exceptions\ComposerUpstreamException;
 use App\Models\ComposerUpstream;
+use Composer\MetadataMinifier\MetadataMinifier;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -87,6 +88,13 @@ readonly class ComposerUpstreamClient
         }
         if (count($versions) > self::MAX_PACKAGE_VERSIONS) {
             throw new ComposerUpstreamException('Composer package metadata contains too many versions.');
+        }
+        if (($payload['minified'] ?? null) === 'composer/2.0') {
+            if (collect($versions)->contains(fn ($version): bool => ! is_array($version))) {
+                throw new ComposerUpstreamException('Composer upstream returned invalid package metadata.');
+            }
+
+            $versions = MetadataMinifier::expand($versions);
         }
 
         $indexedVersions = [];

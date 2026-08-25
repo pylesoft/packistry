@@ -14,6 +14,7 @@ use App\Models\Package;
 use App\Models\Repository;
 use App\Models\Version;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -197,6 +198,17 @@ it('rejects upstream URLs containing credentials, queries, or fragments', functi
     'fragment' => 'https://packages.example.test#private',
 ]);
 
+it('requires connection fields when creating an upstream', function (): void {
+    user(Permission::COMPOSER_UPSTREAM_CREATE);
+    Http::fake();
+
+    postJson('/api/composer-upstreams', [])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['name', 'url', 'auth_type']);
+
+    Http::assertNothingSent();
+});
+
 it('synchronizes archives and publishes only Packistry distribution URLs', function (): void {
     Storage::fake();
     $repository = Repository::factory()->root()->create();
@@ -216,9 +228,12 @@ it('synchronizes archives and publishes only Packistry distribution URLs', funct
                 'version' => '1.0.0',
                 'type' => 'library',
                 'description' => 'upstream description',
+                'source' => ['type' => 'git', 'url' => 'https://vendor.example.test/private.git'],
+                'notification-url' => 'https://vendor.example.test/downloads',
                 'dist' => [
                     'type' => 'zip',
                     'url' => 'https://private.example.test/archive.zip',
+                    'reference' => 'release-1',
                     'shasum' => sha1($archive),
                 ],
             ]]],
@@ -231,6 +246,8 @@ it('synchronizes archives and publishes only Packistry distribution URLs', funct
     $version = $package->versions()->firstOrFail();
     expect($version->archive_path)->not->toBeNull()
         ->and($version->metadata)->not->toHaveKey('dist')
+        ->and($version->metadata)->not->toHaveKey('source')
+        ->and($version->metadata)->not->toHaveKey('notification-url')
         ->and($package->fresh()->description)->toBe('upstream description')
         ->and($package->fresh()->upstream_last_error)->toBeNull();
     Storage::disk()->assertExists($version->archive_path);
@@ -418,10 +435,43 @@ it('dispatches an observable batch with the package option', function (): void {
         'name' => 'test/test',
     ])->assertStatus(202);
 
-    Bus::assertBatched(fn ($batch): bool => $batch->name === RefreshComposerPackage::class
-        && $batch->options['package']->name === 'test/test'
-        && $batch->jobs->first() instanceof RefreshComposerPackage);
+    Bus::assertBatched(function ($batch): bool {
+        $job = $batch->jobs->first();
+        $middleware = $job->middleware()[0] ?? null;
+
+        return $batch->name === RefreshComposerPackage::class
+            && $batch->options['package']->name === 'test/test'
+            && $job instanceof RefreshComposerPackage
+            && ! property_exists($job, 'metadata')
+            && $job->timeout === 3600
+            && $job->tries === 1
+            && $job->failOnTimeout
+            && $middleware instanceof WithoutOverlapping
+            && $middleware->releaseAfter === null
+            && $middleware->expiresAfter === 3660;
+    });
 });
+
+it('distinguishes a missing package from an unavailable upstream during enrollment', function (int $status, string $field): void {
+    Bus::fake();
+    $user = user(Permission::PACKAGE_CREATE);
+    $repository = Repository::factory()->create();
+    $user->repositories()->attach($repository);
+    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    Http::fake([
+        'https://private.example.test/p2/test/test.json' => Http::response([], $status),
+    ]);
+
+    postJson("/api/composer-upstreams/{$upstream->id}/packages", [
+        'repository_id' => $repository->id,
+        'name' => 'test/test',
+    ])->assertUnprocessable()->assertJsonValidationErrors($field);
+
+    expect($repository->packages()->where('name', 'test/test')->exists())->toBeFalse();
+})->with([
+    'not found' => [404, 'name'],
+    'upstream unavailable' => [503, 'upstream'],
+]);
 
 it('deduplicates refresh batches before dispatch and releases the lock after failure', function (): void {
     Bus::fake();
@@ -539,6 +589,69 @@ it('reuses ETag metadata for a not-modified refresh', function (): void {
 
     Http::assertSent(fn ($request): bool => $request->header('If-None-Match')[0] === '"v1"');
     expect($package->fresh()->upstream_checked_at)->not->toBeNull();
+});
+
+it('expands Composer 2 minified metadata before mirroring it', function (): void {
+    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    Http::fake([
+        'https://private.example.test/p2/test/test.json' => Http::response([
+            'minified' => 'composer/2.0',
+            'packages' => ['test/test' => [
+                [
+                    'name' => 'test/test',
+                    'version' => '1.0.0',
+                    'require' => ['php' => '^8.4'],
+                    'dist' => ['type' => 'zip', 'url' => 'https://private.example.test/1.zip'],
+                ],
+                [
+                    'version' => '2.0.0',
+                    'dist' => ['type' => 'zip', 'url' => 'https://private.example.test/2.zip'],
+                ],
+            ]],
+        ]),
+    ]);
+
+    $versions = $upstream->client()->package('test/test')['versions'];
+
+    expect($versions['2.0.0']['name'])->toBe('test/test')
+        ->and($versions['2.0.0']['require'])->toBe(['php' => '^8.4']);
+});
+
+it('refreshes an archive when its stable distribution reference changes', function (): void {
+    Storage::fake();
+    $repository = Repository::factory()->root()->create();
+    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $package = Package::factory()->for($repository)->create([
+        'name' => 'test/test',
+        'composer_upstream_id' => $upstream->id,
+    ]);
+    $archive = file_get_contents(__DIR__.'/../Fixtures/project.zip');
+    assertNotNull($archive);
+    $reference = 'release-1';
+
+    Http::fake(function ($request) use (&$reference, $archive) {
+        if ($request->url() === 'https://private.example.test/p2/test/test.json') {
+            return Http::response([
+                'packages' => ['test/test' => [[
+                    'name' => 'test/test',
+                    'version' => '1.0.0',
+                    'dist' => [
+                        'type' => 'zip',
+                        'url' => 'https://private.example.test/archive.zip',
+                        'reference' => $reference,
+                    ],
+                ]]],
+            ]);
+        }
+
+        return Http::response($archive, 200, ['content-type' => 'application/zip']);
+    });
+
+    app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream']));
+    $reference = 'release-2';
+    app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream']));
+
+    expect(Http::recorded(fn ($request) => $request->url() === 'https://private.example.test/archive.zip'))->toHaveCount(2);
 });
 
 it('rejects an archive belonging to a different Composer package', function (): void {

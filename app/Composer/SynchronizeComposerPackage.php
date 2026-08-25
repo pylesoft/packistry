@@ -84,7 +84,10 @@ readonly class SynchronizeComposerPackage
                 $expectedHash = isset($dist['shasum']) && is_string($dist['shasum']) && $dist['shasum'] !== ''
                     ? strtolower($dist['shasum'])
                     : null;
-                $distIdentity = hash('sha256', $dist['url']);
+                $distReference = isset($dist['reference']) && is_string($dist['reference']) && $dist['reference'] !== ''
+                    ? $dist['reference']
+                    : null;
+                $distIdentity = hash('sha256', $distReference === null ? 'url:'.$dist['url'] : 'reference:'.$distReference);
                 $existingIdentity = is_array($existing?->metadata)
                     ? ($existing->metadata['upstream_dist_identity'] ?? null)
                     : null;
@@ -216,7 +219,7 @@ readonly class SynchronizeComposerPackage
     private function versionMetadata(array $version, string $distIdentity): array
     {
         return collect($version)
-            ->except(['name', 'version', 'dist', 'type'])
+            ->except(['name', 'version', 'dist', 'source', 'notification-url', 'type'])
             ->put('upstream_dist_identity', $distIdentity)
             ->all();
     }

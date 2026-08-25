@@ -7,12 +7,14 @@ namespace App\Http\Controllers;
 use App\Enums\ComposerUpstreamAuthType;
 use App\Enums\PackageType;
 use App\Enums\Permission;
+use App\Exceptions\ComposerUpstreamException;
 use App\Http\Resources\ComposerUpstreamResource;
 use App\Http\Resources\PackageResource;
 use App\Jobs\RefreshComposerPackage;
 use App\Models\ComposerUpstream;
 use App\Models\Package;
 use App\Models\Repository;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -96,8 +98,18 @@ readonly class ComposerUpstreamController extends Controller
 
         try {
             $metadata = $composerUpstream->client()->package($name);
-        } catch (Throwable) {
-            throw ValidationException::withMessages(['name' => 'The package could not be found upstream.']);
+        } catch (ComposerUpstreamException $exception) {
+            $notFound = $exception->getMessage() === 'Package was not found upstream.';
+
+            throw ValidationException::withMessages([
+                $notFound ? 'name' : 'upstream' => $notFound
+                    ? 'The package could not be found upstream.'
+                    : 'The Composer upstream could not provide package metadata.',
+            ]);
+        } catch (ConnectionException) {
+            throw ValidationException::withMessages([
+                'upstream' => 'The Composer upstream could not be reached.',
+            ]);
         }
 
         if ($metadata['versions'] === []) {
@@ -111,7 +123,7 @@ readonly class ComposerUpstreamController extends Controller
             'composer_upstream_id' => $composerUpstream->id,
         ])->save();
 
-        $batch = RefreshComposerPackage::dispatchFor($package, $metadata);
+        $batch = RefreshComposerPackage::dispatchFor($package);
         if ($batch === null) {
             return response()->json(['message' => 'A refresh for this package is already in progress.'], 409);
         }
@@ -179,10 +191,11 @@ readonly class ComposerUpstreamController extends Controller
     /** @return array<string, mixed> */
     private function validatedConnection(Request $request, bool $updating, ?ComposerUpstream $existing = null): array
     {
+        $presence = $updating ? 'sometimes' : 'required';
         $data = $request->validate([
-            'name' => ['sometimes', 'required', 'string', 'max:255'],
-            'url' => ['sometimes', 'required', 'url:http,https', 'max:2048'],
-            'auth_type' => ['sometimes', 'required', Rule::enum(ComposerUpstreamAuthType::class)],
+            'name' => [$presence, 'string', 'max:255'],
+            'url' => [$presence, 'url:http,https', 'max:2048'],
+            'auth_type' => [$presence, Rule::enum(ComposerUpstreamAuthType::class)],
             'username' => ['nullable', 'string', 'max:1000'],
             'password' => ['nullable', 'string', 'max:1000'],
             'token' => ['nullable', 'string', 'max:2000'],

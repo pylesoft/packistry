@@ -45,13 +45,14 @@ An administrator enrolls a package name such as `dedoc/scramble-pro` from one up
 - Composer metadata requests never perform upstream discovery or synchronization in V1.
 - Composer clients always receive Packistry metadata; they never contact the paid upstream.
 - Every upstream `dist.url` is replaced with a Packistry download URL.
+- Composer 2 minified metadata is expanded before synchronization, and upstream `source` and notification endpoints are removed from mirrored versions.
 - Archives are downloaded during enrollment or refresh, validated, and imported through Packistry's existing package/version/archive pipeline.
 - New or changed versions are queued in the existing batch-processing model. Already synchronized versions are skipped.
 - There is no cold-download state, request-time upstream call, persistent state machine, or new cache-locking subsystem in V1.
 
 ### Refresh scheduling
 
-The scheduler only finds due packages and dispatches one unique refresh job per package. It does not download archives itself. The scheduled command runs hourly with `onOneServer()` and overlap protection; managed queue workers perform network and archive work. Conditional `ETag` or `Last-Modified` requests are used when supported by the upstream.
+The scheduler only finds due packages and dispatches one unique refresh job per package. The queued payload contains only the package identifier and lock owner; the worker fetches metadata itself. It does not download archives in the scheduler or serialize vendor metadata into the queue. The scheduled command runs hourly with `onOneServer()` and overlap protection; managed queue workers perform network and archive work. Conditional `ETag` or `Last-Modified` requests are used when supported by the upstream.
 
 The maximum normal discovery delay for a new vendor release is therefore about one hour. **Refresh now** is available on each mirrored package when an administrator needs a release immediately. The action shows the associated batch status and is disabled while that package is already synchronizing. The one-hour cadence is fixed in V1 and becomes configurable only if operational experience requires it.
 
@@ -62,6 +63,7 @@ The maximum normal discovery delay for a new vendor release is therefore about o
 - A refresh validates and downloads every changed archive before publishing the new package snapshot atomically.
 - Authenticated upstreams require HTTPS. Every metadata, archive, and redirect destination is checked against private and reserved network ranges, then its validated address is pinned into the transport request while the original hostname remains authoritative for TLS.
 - Metadata responses are limited to 16 MiB and 10,000 advertised versions. Archive downloads stream one at a time to unpublished storage paths and are rejected above 256 MiB, so workers do not accumulate package ZIPs in memory.
+- Refresh jobs have a one-hour execution budget and a separate runtime overlap lock. Duplicate deliveries cannot run synchronization concurrently, and a terminal failure is retried by the next scheduled or manual refresh.
 - Disabling an upstream stops refresh but does not delete packages or cached archives.
 - Deletion remains a separate, explicit destructive operation.
 

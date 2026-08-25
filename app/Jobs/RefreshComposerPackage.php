@@ -10,6 +10,7 @@ use Illuminate\Bus\Batch;
 use Illuminate\Bus\Batchable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
@@ -21,15 +22,18 @@ class RefreshComposerPackage implements ShouldQueue
 
     private const int LOCK_SECONDS = 7200;
 
-    /** @param array<string, mixed>|null $metadata */
+    public int $timeout = 3600;
+
+    public int $tries = 1;
+
+    public bool $failOnTimeout = true;
+
     public function __construct(
         public readonly int $packageId,
-        public readonly ?array $metadata = null,
         public readonly ?string $lockOwner = null,
     ) {}
 
-    /** @param array<string, mixed>|null $metadata */
-    public static function dispatchFor(Package $package, ?array $metadata = null): ?Batch
+    public static function dispatchFor(Package $package): ?Batch
     {
         $lock = Cache::lock(self::lockKey($package->id), self::LOCK_SECONDS);
 
@@ -40,7 +44,7 @@ class RefreshComposerPackage implements ShouldQueue
         $owner = $lock->owner();
 
         try {
-            return Bus::batch([new self($package->id, $metadata, $owner)])
+            return Bus::batch([new self($package->id, $owner)])
                 ->name(self::class)
                 ->withOption('package', $package)
                 ->allowFailures()
@@ -63,7 +67,7 @@ class RefreshComposerPackage implements ShouldQueue
                 return;
             }
 
-            $synchronizer->handle($package, $this->metadata);
+            $synchronizer->handle($package);
             $this->releaseLock();
         } catch (Throwable $exception) {
             if (isset($package)) {
@@ -84,6 +88,16 @@ class RefreshComposerPackage implements ShouldQueue
         } finally {
             $this->releaseLock();
         }
+    }
+
+    /** @return list<WithoutOverlapping> */
+    public function middleware(): array
+    {
+        return [
+            (new WithoutOverlapping('composer-package-sync:'.$this->packageId))
+                ->dontRelease()
+                ->expireAfter($this->timeout + 60),
+        ];
     }
 
     private static function lockKey(int $packageId): string
