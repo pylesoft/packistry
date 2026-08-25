@@ -25,6 +25,9 @@ use Illuminate\Support\Carbon;
  * @property string|null $latest_version
  * @property string $type
  * @property string|null $description
+ * @property string|null $upstream_last_error
+ * @property Carbon|null $upstream_checked_at
+ * @property Carbon|null $upstream_synced_at
  * @property int $total_downloads
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -49,6 +52,14 @@ class Package extends Model
     protected $attributes = [
         'total_downloads' => 0,
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'upstream_checked_at' => 'datetime',
+            'upstream_synced_at' => 'datetime',
+        ];
+    }
 
     /**
      * @return BelongsTo<Repository, $this>

@@ -100,11 +100,9 @@ class RefreshComposerPackage implements ShouldQueue
 
     private function markUnhealthy(Package $package): void
     {
-        $package->forceFill(['upstream_checked_at' => now()])->save();
-        $package->composerUpstream?->forceFill([
-            'health_status' => 'unhealthy',
-            'last_error' => 'Composer upstream synchronization failed.',
-            'last_checked_at' => now(),
+        $package->forceFill([
+            'upstream_checked_at' => now(),
+            'upstream_last_error' => 'Composer upstream synchronization failed.',
         ])->save();
     }
 }

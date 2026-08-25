@@ -12,8 +12,8 @@
 
 ## Entities
 
-- `ComposerUpstream`: connection, encrypted authentication, enabled state, and health.
-- Existing `Package`: downstream package plus optional upstream ownership.
+- `ComposerUpstream`: connection, encrypted authentication, enabled state, and last successful validation time.
+- Existing `Package`: downstream package plus optional upstream ownership and synchronization health.
 - Existing `Version`: normalized metadata backed by a synchronized immutable archive.
 
 ## Invariants
@@ -22,6 +22,7 @@
 - Upstream credentials never cross the downstream Composer boundary.
 - A cached archive is immutable and remains addressable by its checksum-qualified URL.
 - Refresh failure never deletes the last valid metadata or a cached archive.
+- A package snapshot becomes visible only after every changed archive has been safely downloaded and validated.
 
 ## Boundaries
 

@@ -14,6 +14,7 @@ return new class extends Migration
             $table->foreignId('composer_upstream_id')->nullable()->after('source_id')->constrained('composer_upstreams')->nullOnDelete();
             $table->timestamp('upstream_checked_at')->nullable();
             $table->timestamp('upstream_synced_at')->nullable();
+            $table->text('upstream_last_error')->nullable();
             $table->string('upstream_etag')->nullable();
             $table->string('upstream_last_modified')->nullable();
         });
@@ -33,7 +34,7 @@ return new class extends Migration
             $table->dropForeign(['composer_upstream_id']);
             $table->dropColumn([
                 'composer_upstream_id', 'upstream_checked_at', 'upstream_synced_at',
-                'upstream_etag', 'upstream_last_modified',
+                'upstream_last_error', 'upstream_etag', 'upstream_last_modified',
             ]);
         });
     }

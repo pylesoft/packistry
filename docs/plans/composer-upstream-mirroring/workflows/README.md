@@ -22,8 +22,9 @@ See [Setup And Runtime Flow](setup-and-runtime.md) for the complete UI and Compo
 ### Refresh
 
 1. A scheduled or manual job fetches current metadata for each enrolled package.
-2. New or changed versions are downloaded and imported by a queued batch.
-3. Removed upstream versions receive an `upstream_removed_at` timestamp and stop appearing in fresh resolution, while their records and archives remain available to old lock files.
+2. New or changed versions are streamed and validated one at a time, then moved to unique unpublished storage paths while the batch retains only small descriptors.
+3. After every archive succeeds, Packistry atomically publishes the complete package snapshot and adopts those paths as immutable archives.
+4. Removed upstream versions receive an `upstream_removed_at` timestamp and stop appearing in fresh resolution, while their records and archives remain available to old lock files.
 
 ## State Transitions
 
@@ -31,8 +32,8 @@ Synchronization uses the existing package-import batch lifecycle. No new persist
 
 ## Failure Modes
 
-- Invalid credentials: reject connection validation or mark later refresh unhealthy.
+- Invalid credentials: reject connection validation; later package refresh failures are recorded on the affected package.
 - Metadata timeout/5xx: keep last valid metadata and retry on the next schedule.
 - Unknown package: reject enrollment without creating an empty package.
-- Archive checksum mismatch: discard the temporary download and leave the version unpublished.
+- Archive checksum mismatch, unsafe destination, or oversized archive: discard every temporary download and leave the previous package snapshot unchanged.
 - Disabled upstream: serve cached content only.

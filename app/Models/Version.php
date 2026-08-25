@@ -115,7 +115,7 @@ class Version extends Model
         });
     }
 
-    private function isStable(): bool
+    public function isStable(): bool
     {
         $parser = new VersionParser;
 

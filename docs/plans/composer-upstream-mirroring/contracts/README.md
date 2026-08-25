@@ -16,7 +16,9 @@
 | HTTP Basic | Username and password | Standard HTTP Basic authorization for the configured origin. | Required by the initial providers. |
 | Bearer | Token | `Authorization: Bearer <token>` for the configured origin. | Recommended. |
 
-Credentials are encrypted at rest and write-only through the application API. Editing an upstream without submitting a replacement secret preserves the existing credential. Validation and synchronization may use credentials only for the exact configured origin. Redirects to another origin must not receive the upstream authorization header; archive downloads follow the destination's own authentication requirements instead.
+Credentials are encrypted at rest and write-only through the application API. Editing an upstream without submitting a replacement secret preserves the existing credential. Authenticated upstreams require HTTPS. Validation and synchronization may use credentials only for the exact configured origin. Redirects to another origin must not receive the upstream authorization header; archive downloads follow the destination's own authentication requirements instead.
+
+Every outbound metadata, archive, and redirect URL must use HTTP(S), omit embedded credentials, resolve only to public addresses, and pass the same safety guard immediately before its request. The validated address is pinned through cURL while the original hostname remains in the URL for host and TLS verification. Metadata is bounded to 16 MiB and 10,000 versions; each archive is bounded to 256 MiB.
 
 V1 deliberately excludes arbitrary headers, credentials embedded in URLs, GitHub/GitLab OAuth, and client TLS certificates. These are added only when a licensed package provides a concrete requirement.
 

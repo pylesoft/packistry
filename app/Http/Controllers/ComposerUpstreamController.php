@@ -15,6 +15,8 @@ use App\Models\Package;
 use App\Models\Repository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -35,7 +37,7 @@ readonly class ComposerUpstreamController extends Controller
         $data = $this->validatedConnection($request, false);
         $upstream = new ComposerUpstream($data);
 
-        $this->validateConnection($upstream);
+        $upstream->forceFill($this->validatedHealth($upstream));
         $upstream->save();
 
         return response()->json(new ComposerUpstreamResource($upstream), 201);
@@ -49,7 +51,7 @@ readonly class ComposerUpstreamController extends Controller
         $candidate->fill($data);
 
         if (($data['enabled'] ?? $composerUpstream->enabled) !== false) {
-            $this->validateConnection($candidate);
+            $data = [...$data, ...$this->validatedHealth($candidate)];
         }
         $composerUpstream->fill($data)->save();
 
@@ -180,7 +182,7 @@ readonly class ComposerUpstreamController extends Controller
         $data = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'url' => ['sometimes', 'required', 'url:http,https', 'max:2048'],
-            'auth_type' => ['sometimes', 'required', 'string', 'in:none,basic,bearer'],
+            'auth_type' => ['sometimes', 'required', Rule::enum(ComposerUpstreamAuthType::class)],
             'username' => ['nullable', 'string', 'max:1000'],
             'password' => ['nullable', 'string', 'max:1000'],
             'token' => ['nullable', 'string', 'max:2000'],
@@ -189,7 +191,7 @@ readonly class ComposerUpstreamController extends Controller
 
         $data['url'] = rtrim((string) ($data['url'] ?? $existing?->url), '/');
         $parts = parse_url($data['url']);
-        if (! is_array($parts) || isset($parts['user'], $parts['pass'], $parts['query'], $parts['fragment'])) {
+        if (! is_array($parts) || array_intersect(['user', 'pass', 'query', 'fragment'], array_keys($parts)) !== []) {
             throw ValidationException::withMessages(['url' => 'The upstream URL must contain only an HTTP(S) URL and path.']);
         }
 
@@ -197,14 +199,12 @@ readonly class ComposerUpstreamController extends Controller
         $data['auth_type'] = $auth;
 
         $authChanged = $updating && $existing?->auth_type !== $auth;
+        $credentialsRequired = ! $updating || $authChanged || $existing?->hasCredentials() !== true;
 
         if ($auth === ComposerUpstreamAuthType::BASIC) {
             $hasUsername = array_key_exists('username', $data) && filled($data['username']);
             $hasPassword = array_key_exists('password', $data) && filled($data['password']);
-            if ((! $updating || $authChanged) && (! $hasUsername || ! $hasPassword)) {
-                throw ValidationException::withMessages(['password' => 'Basic authentication requires a username and password.']);
-            }
-            if ($updating && ! $authChanged && (! $hasUsername || ! $hasPassword) && $existing?->hasCredentials() !== true) {
+            if ($credentialsRequired && (! $hasUsername || ! $hasPassword)) {
                 throw ValidationException::withMessages(['password' => 'Basic authentication requires a username and password.']);
             }
 
@@ -218,11 +218,7 @@ readonly class ComposerUpstreamController extends Controller
             }
         }
 
-        if ($auth === ComposerUpstreamAuthType::BEARER && (! $updating || $authChanged) && ! filled($data['token'] ?? null)) {
-            throw ValidationException::withMessages(['token' => 'Bearer authentication requires a token.']);
-        }
-
-        if ($auth === ComposerUpstreamAuthType::BEARER && $updating && ! $authChanged && ! filled($data['token'] ?? null) && $existing?->hasCredentials() !== true) {
+        if ($auth === ComposerUpstreamAuthType::BEARER && $credentialsRequired && ! filled($data['token'] ?? null)) {
             throw ValidationException::withMessages(['token' => 'Bearer authentication requires a token.']);
         }
 
@@ -241,12 +237,17 @@ readonly class ComposerUpstreamController extends Controller
         return $data;
     }
 
-    private function validateConnection(ComposerUpstream $upstream): void
+    /** @return array{last_checked_at: Carbon} */
+    private function validatedHealth(ComposerUpstream $upstream): array
     {
         try {
             $upstream->client()->validate();
         } catch (Throwable) {
             throw ValidationException::withMessages(['url' => 'The Composer upstream could not be validated.']);
         }
+
+        return [
+            'last_checked_at' => now(),
+        ];
     }
 }

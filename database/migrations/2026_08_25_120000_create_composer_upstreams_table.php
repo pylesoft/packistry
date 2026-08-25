@@ -19,10 +19,7 @@ return new class extends Migration
             $table->text('password')->nullable();
             $table->text('token')->nullable();
             $table->boolean('enabled')->default(true);
-            $table->string('health_status')->default('unknown');
-            $table->text('last_error')->nullable();
             $table->timestamp('last_checked_at')->nullable();
-            $table->timestamp('last_synced_at')->nullable();
             $table->timestamps();
         });
     }

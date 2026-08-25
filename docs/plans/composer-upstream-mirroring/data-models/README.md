@@ -4,8 +4,8 @@
 
 | Model | Responsibility | Key Fields | Relationships |
 | --- | --- | --- | --- |
-| `ComposerUpstream` | Connect to one reusable Composer 2 source. | name, URL, auth type, encrypted credentials, enabled, last sync status | Has many `Package` records across downstream repositories. |
-| `Package` extension | Record upstream ownership and refresh cursor. | nullable `composer_upstream_id`, last checked/synchronized timestamps, optional ETag/Last-Modified values | Existing package belongs to zero or one Composer upstream. |
+| `ComposerUpstream` | Connect to one reusable Composer 2 source. | name, URL, auth type, encrypted credentials, enabled, last successful connection validation | Has many `Package` records across downstream repositories. |
+| `Package` extension | Record upstream ownership, refresh cursor, and package-specific synchronization health. | nullable `composer_upstream_id`, checked/synchronized timestamps, last error, optional ETag/Last-Modified values | Existing package belongs to zero or one Composer upstream. |
 | `Version` extension | Store synchronized metadata and immutable archive identity while preserving yanked versions for old locks. | existing metadata/checksum/archive fields plus nullable `upstream_removed_at` | Existing version belongs to a package. |
 
 ## Persistence Rules
@@ -17,4 +17,4 @@
 
 ## Migration Notes
 
-Add one global upstream table, one nullable package foreign key, and one nullable version removal timestamp. Reuse existing version and archive storage.
+Add one global upstream table, nullable package ownership and synchronization fields, and one nullable version removal timestamp. Reuse existing version and archive storage.

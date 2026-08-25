@@ -7,13 +7,24 @@ namespace App\Composer;
 use App\Enums\ComposerUpstreamAuthType;
 use App\Exceptions\ComposerUpstreamException;
 use App\Models\ComposerUpstream;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 readonly class ComposerUpstreamClient
 {
-    public function __construct(private ComposerUpstream $upstream) {}
+    private const int MAX_ARCHIVE_BYTES = 268_435_456;
+
+    private const int MAX_METADATA_BYTES = 16_777_216;
+
+    // Keeps malformed metadata bounded without restricting normal all-history mirrors.
+    private const int MAX_PACKAGE_VERSIONS = 10_000;
+
+    public function __construct(
+        private ComposerUpstream $upstream,
+        private ?OutboundUrlGuard $urlGuard = null,
+    ) {}
 
     /** @return array<string, mixed> */
     public function validate(): array
@@ -74,6 +85,9 @@ readonly class ComposerUpstreamClient
         if ($versions === null) {
             throw new ComposerUpstreamException('Composer upstream returned invalid package metadata.');
         }
+        if (count($versions) > self::MAX_PACKAGE_VERSIONS) {
+            throw new ComposerUpstreamException('Composer package metadata contains too many versions.');
+        }
 
         $indexedVersions = [];
         foreach ($versions as $version) {
@@ -92,9 +106,16 @@ readonly class ComposerUpstreamClient
         ];
     }
 
-    public function archive(string $url): Response
+    public function archive(string $url, string $path): Response
     {
-        return $this->get($url);
+        $response = $this->get($url, [], $path);
+        $contentLength = $response->header('Content-Length');
+        if (($contentLength !== '' && (int) $contentLength > self::MAX_ARCHIVE_BYTES)
+            || (is_file($path) && filesize($path) > self::MAX_ARCHIVE_BYTES)) {
+            throw new ComposerUpstreamException('Composer package archive exceeds the size limit.');
+        }
+
+        return $response;
     }
 
     public function endpoint(string $path): string
@@ -103,28 +124,23 @@ readonly class ComposerUpstreamClient
     }
 
     /** @param array<string, string> $headers */
-    private function get(string $url, array $headers = []): Response
+    private function get(string $url, array $headers = [], ?string $sink = null): Response
     {
         $current = $url;
 
         for ($attempt = 0; $attempt < 4; $attempt++) {
-            $request = Http::timeout(30)
-                ->connectTimeout(10)
-                ->withOptions(['allow_redirects' => false])
-                ->withHeaders($headers);
-
-            if ($this->sameOrigin($current, $this->upstream->url)) {
-                $request = match ($this->upstream->auth_type) {
-                    ComposerUpstreamAuthType::NONE => $request,
-                    ComposerUpstreamAuthType::BASIC => $request->withBasicAuth(
-                        (string) $this->upstream->username,
-                        (string) $this->upstream->password,
-                    ),
-                    ComposerUpstreamAuthType::BEARER => $request->withToken((string) $this->upstream->token),
-                };
+            $addresses = $this->guard()->ensureSafe(
+                $current,
+                $this->upstream->auth_type !== ComposerUpstreamAuthType::NONE,
+            );
+            $response = $this->requestPinned($current, $addresses, $headers, $sink);
+            if ($sink === null) {
+                $contentLength = $response->header('Content-Length');
+                if (($contentLength !== '' && (int) $contentLength > self::MAX_METADATA_BYTES)
+                    || strlen($response->body()) > self::MAX_METADATA_BYTES) {
+                    throw new ComposerUpstreamException('Composer upstream metadata exceeds the size limit.');
+                }
             }
-
-            $response = $request->get($current);
             $redirect = $response->redirect();
             if ($redirect === false) {
                 return $response;
@@ -139,6 +155,86 @@ readonly class ComposerUpstreamClient
         }
 
         throw new ComposerUpstreamException('Composer upstream redirected too many times.');
+    }
+
+    /**
+     * @param  list<string>  $addresses
+     * @param  array<string, string>  $headers
+     */
+    private function requestPinned(string $url, array $addresses, array $headers, ?string $sink): Response
+    {
+        $parts = parse_url($url);
+        if (! is_array($parts) || ! isset($parts['scheme'], $parts['host'])) {
+            throw new ComposerUpstreamException('Composer upstream URL is invalid.');
+        }
+
+        $host = trim($parts['host'], '[]');
+        $port = $this->port($parts);
+        if ($port === null) {
+            throw new ComposerUpstreamException('Composer upstream URL is invalid.');
+        }
+
+        foreach ($addresses as $index => $address) {
+            $limit = $sink === null ? self::MAX_METADATA_BYTES : self::MAX_ARCHIVE_BYTES;
+            $options = [
+                'allow_redirects' => false,
+                'on_headers' => static function ($response) use ($limit): void {
+                    if ((int) $response->getHeaderLine('Content-Length') > $limit) {
+                        throw new ComposerUpstreamException('Composer upstream response exceeds the size limit.');
+                    }
+                },
+                'progress' => static function (int $downloadTotal, int $downloadedBytes) use ($limit): void {
+                    if ($downloadTotal > $limit || $downloadedBytes > $limit) {
+                        throw new ComposerUpstreamException('Composer upstream response exceeds the size limit.');
+                    }
+                },
+            ];
+            if (filter_var($host, FILTER_VALIDATE_IP) === false) {
+                $options['curl'] = [CURLOPT_RESOLVE => [$this->resolveEntry($host, $port, $address)]];
+            }
+
+            $request = Http::timeout(30)
+                ->connectTimeout(10)
+                ->withOptions($options)
+                ->withHeaders($headers);
+
+            if ($sink !== null) {
+                $request = $request->sink($sink);
+            }
+
+            if ($this->sameOrigin($url, $this->upstream->url)) {
+                $request = match ($this->upstream->auth_type) {
+                    ComposerUpstreamAuthType::NONE => $request,
+                    ComposerUpstreamAuthType::BASIC => $request->withBasicAuth(
+                        (string) $this->upstream->username,
+                        (string) $this->upstream->password,
+                    ),
+                    ComposerUpstreamAuthType::BEARER => $request->withToken((string) $this->upstream->token),
+                };
+            }
+
+            try {
+                return $request->get($url);
+            } catch (ConnectionException $exception) {
+                if ($index === array_key_last($addresses)) {
+                    throw $exception;
+                }
+            }
+        }
+
+        throw new ComposerUpstreamException('Composer upstream connection failed.');
+    }
+
+    private function resolveEntry(string $host, int $port, string $address): string
+    {
+        $pinnedAddress = str_contains($address, ':') ? "[$address]" : $address;
+
+        return "$host:$port:$pinnedAddress";
+    }
+
+    private function guard(): OutboundUrlGuard
+    {
+        return $this->urlGuard ?? app(OutboundUrlGuard::class);
     }
 
     private function sameOrigin(string $left, string $right): bool

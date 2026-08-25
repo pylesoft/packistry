@@ -44,10 +44,63 @@ class CreateFromZip
         ?string $version = null,
     ): Version {
         $decoded = $this->decodedComposerJsonFromZip($path);
+        $version ??= $decoded['version'] ?? throw new VersionNotFoundException('no version provided');
+        $hash = hash_file('sha1', $path);
+        if ($hash === false) {
+            throw new RuntimeException('failed to calculate hash');
+        }
+        $createdVersion = $package->versions()->where('name', Normalizer::version($version))->first();
+        $existingArchive = $createdVersion !== null
+            ? $createdVersion->archives()->where('shasum', $hash)->first()
+            : null;
+        $archivePath = is_null($existingArchive)
+            ? $package->repository->archivePath(Str::uuid7()->toString().'.zip')
+            : $existingArchive->archive_path;
+        $storedPath = false;
 
+        if (! Storage::disk()->exists($archivePath)) {
+            $this->storeArchive($path, $archivePath);
+            $storedPath = is_null($existingArchive);
+        }
+
+        try {
+            return $this->createFromStoredArchive($package, $archivePath, $hash, $decoded, $version);
+        } catch (\Throwable $exception) {
+            if ($storedPath) {
+                Storage::disk()->delete($archivePath);
+            }
+
+            throw $exception;
+        }
+    }
+
+    public function stageArchive(Package $package, string $path): string
+    {
+        do {
+            $archivePath = $package->repository->archivePath(Str::uuid7()->toString().'.zip');
+        } while (Storage::disk()->exists($archivePath));
+
+        try {
+            $this->storeArchive($path, $archivePath);
+        } catch (\Throwable $exception) {
+            Storage::disk()->delete($archivePath);
+
+            throw $exception;
+        }
+
+        return $archivePath;
+    }
+
+    /** @param array<string, mixed> $decoded */
+    public function createFromStoredArchive(
+        Package $package,
+        string $archivePath,
+        string $hash,
+        array $decoded,
+        ?string $version = null,
+    ): Version {
         $version ??= $decoded['version'] ?? throw new VersionNotFoundException('no version provided');
         $name = $decoded['name'] ?? throw new NameNotFoundException('no name provided');
-
         $currentOrder = Normalizer::versionOrder($version);
         $latestOrder = $package->versions()->max('order');
 
@@ -68,14 +121,49 @@ class CreateFromZip
             ->versions()
             ->where('name', $versionName = Normalizer::version($version))
             ->first() ?? new Version;
+        $metadata = $this->versionMetadata($decoded);
 
-        $hash = hash_file('sha1', $path);
+        DB::transaction(function () use ($archivePath, $createdVersion, $currentOrder, $hash, $metadata, $package, $versionName): void {
+            $createdVersion->package_id = $package->id;
+            $createdVersion->name = $versionName;
+            $createdVersion->order = $currentOrder;
+            $createdVersion->shasum = $hash;
+            $createdVersion->archive_path = $archivePath;
+            $createdVersion->metadata = $metadata;
+            $createdVersion->save();
 
-        if ($hash === false) {
-            throw new RuntimeException('failed to calculate hash');
+            $createdVersion->archives()->firstOrCreate(
+                ['shasum' => $hash],
+                ['archive_path' => $archivePath]
+            );
+        });
+
+        return $createdVersion;
+    }
+
+    private function storeArchive(string $sourcePath, string $archivePath): void
+    {
+        $stream = fopen($sourcePath, 'rb');
+        if ($stream === false) {
+            throw new RuntimeException('failed to open archive stream');
         }
 
-        $metadata = collect($decoded)->only([
+        try {
+            if (Storage::disk()->put($archivePath, $stream) === false) {
+                throw new RuntimeException('failed to store archive stream');
+            }
+        } finally {
+            fclose($stream);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $decoded
+     * @return array<string, mixed>
+     */
+    private function versionMetadata(array $decoded): array
+    {
+        return collect($decoded)->only([
             'description',
             'readme',
             'keywords',
@@ -112,37 +200,5 @@ class CreateFromZip
             '_comment',
             'non-feature-branches',
         ])->toArray();
-
-        /** @var string $contents */
-        $contents = file_get_contents($path);
-
-        $existingArchive = $createdVersion->exists
-            ? $createdVersion->archives()->where('shasum', $hash)->first()
-            : null;
-
-        $archivePath = is_null($existingArchive)
-            ? $package->repository->archivePath(Str::uuid7()->toString().'.zip')
-            : $existingArchive->archive_path;
-
-        if (! Storage::disk()->exists($archivePath)) {
-            Storage::disk()->put($archivePath, $contents);
-        }
-
-        DB::transaction(function () use ($archivePath, $createdVersion, $currentOrder, $hash, $metadata, $package, $versionName): void {
-            $createdVersion->package_id = $package->id;
-            $createdVersion->name = $versionName;
-            $createdVersion->order = $currentOrder;
-            $createdVersion->shasum = $hash;
-            $createdVersion->archive_path = $archivePath;
-            $createdVersion->metadata = $metadata;
-            $createdVersion->save();
-
-            $createdVersion->archives()->firstOrCreate(
-                ['shasum' => $hash],
-                ['archive_path' => $archivePath]
-            );
-        });
-
-        return $createdVersion;
     }
 }

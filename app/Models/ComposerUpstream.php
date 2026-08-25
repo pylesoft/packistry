@@ -21,10 +21,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $password
  * @property string|null $token
  * @property bool $enabled
- * @property string $health_status
- * @property string|null $last_error
  * @property Carbon|null $last_checked_at
- * @property Carbon|null $last_synced_at
  */
 class ComposerUpstream extends Model
 {
@@ -44,7 +41,6 @@ class ComposerUpstream extends Model
             'token' => 'encrypted',
             'enabled' => 'bool',
             'last_checked_at' => 'datetime',
-            'last_synced_at' => 'datetime',
         ];
     }
 

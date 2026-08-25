@@ -57,8 +57,11 @@ The maximum normal discovery delay for a new vendor release is therefore about o
 
 ### Failure behavior
 
-- If metadata refresh fails, the last valid metadata remains available and the upstream is shown as unhealthy.
+- If metadata refresh fails, the last valid metadata remains available and the package shows its synchronization error. The upstream card records only its last successful connection validation.
 - If an archive cannot be fetched during synchronization, that version is not published until a retry succeeds; previously mirrored versions remain usable.
+- A refresh validates and downloads every changed archive before publishing the new package snapshot atomically.
+- Authenticated upstreams require HTTPS. Every metadata, archive, and redirect destination is checked against private and reserved network ranges, then its validated address is pinned into the transport request while the original hostname remains authoritative for TLS.
+- Metadata responses are limited to 16 MiB and 10,000 advertised versions. Archive downloads stream one at a time to unpublished storage paths and are rejected above 256 MiB, so workers do not accumulate package ZIPs in memory.
 - Disabling an upstream stops refresh but does not delete packages or cached archives.
 - Deletion remains a separate, explicit destructive operation.
 
