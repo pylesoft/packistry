@@ -32,7 +32,9 @@ Packistry currently imports VCS projects through `SourceProvider` clients shaped
 
 ### Product boundary
 
-Packistry presents Composer upstreams in the existing **Sources** area, while the backend keeps them separate from the VCS-specific `SourceProvider` contract. A `ComposerUpstream` contains its base URL, authentication strategy, encrypted credentials, and enabled state. It can be reused when enrolling packages into one or more Packistry repositories. V1 needs no priority system because the administrator explicitly selects the owning upstream and target repository when enrolling a package.
+Packistry models a Composer repository as `SourceProvider::COMPOSER` in the existing **Sources** domain and CRUD API. The `Source` contains its base URL, authentication strategy, encrypted credentials, and enabled state, and can be reused when enrolling packages into one or more Packistry repositories. V1 needs no priority system because the administrator explicitly selects the owning source and target repository when enrolling a package.
+
+The domain is unified without creating a false universal provider interface. VCS sources continue to use the project, branch, tag, and webhook client; Composer sources use a separate metadata and archive client. Provider-aware source and package actions select the appropriate capability before invoking either client.
 
 V1 presents three authentication choices: **None**, **HTTP Basic**, and **Bearer token**. HTTP Basic is the required first-class path for the initial paid Laravel ecosystem: both Flux Pro and Scramble Pro use the purchaser's account email as the username and a license/API key as the password. The form keeps generic `Username` and `Password` labels with helper text explaining that common convention. Bearer remains a small standards-based option for future repositories; arbitrary headers, OAuth flows, and client certificates are deferred.
 
@@ -58,7 +60,7 @@ The maximum normal discovery delay for a new vendor release is therefore about o
 
 ### Failure behavior
 
-- If metadata refresh fails, the last valid metadata remains available and the package shows its synchronization error. The upstream card records only its last successful connection validation.
+- If metadata refresh fails, the last valid metadata remains available and the package shows its synchronization error. The source card records only its last successful connection validation.
 - If an archive cannot be fetched during synchronization, that version is not published until a retry succeeds; previously mirrored versions remain usable.
 - A refresh validates and downloads every changed archive before publishing the new package snapshot atomically.
 - Authenticated upstreams require HTTPS. Every metadata, archive, and redirect destination is checked against private and reserved network ranges, then its validated address is pinned into the transport request while the original hostname remains authoritative for TLS.

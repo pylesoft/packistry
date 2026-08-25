@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Factories;
 
+use App\Enums\ComposerUpstreamAuthType;
 use App\Enums\SourceProvider;
 use App\Models\Source;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -23,7 +24,7 @@ class SourceFactory extends Factory
     {
         return [
             'name' => fake()->name,
-            'provider' => fake()->randomElement(SourceProvider::cases()),
+            'provider' => fake()->randomElement(SourceProvider::vcsCases()),
             'url' => fake()->url,
             'token' => encrypt(Str::random()),
             'secret' => encrypt(Str::random()),
@@ -41,7 +42,42 @@ class SourceFactory extends Factory
                     SourceProvider::GITLAB => 'https://gitlab.com',
                     SourceProvider::GITHUB => 'https://api.github.com',
                     SourceProvider::BITBUCKET => 'https://api.bitbucket.org',
+                    SourceProvider::COMPOSER => 'https://composer.example.com',
                 },
             ]);
+    }
+
+    public function composer(): static
+    {
+        return $this->provider(SourceProvider::COMPOSER)->state([
+            'token' => encrypt(''),
+            'auth_type' => ComposerUpstreamAuthType::NONE,
+            'enabled' => true,
+            'last_checked_at' => now(),
+        ]);
+    }
+
+    public function basic(string $username = 'buyer@example.test', string $password = 'license'): static
+    {
+        return $this->state([
+            'provider' => SourceProvider::COMPOSER,
+            'token' => encrypt(''),
+            'secret' => encrypt('secret'),
+            'auth_type' => ComposerUpstreamAuthType::BASIC,
+            'username' => encrypt($username),
+            'password' => encrypt($password),
+            'enabled' => true,
+        ]);
+    }
+
+    public function bearer(string $token = 'token'): static
+    {
+        return $this->state([
+            'provider' => SourceProvider::COMPOSER,
+            'secret' => encrypt('secret'),
+            'auth_type' => ComposerUpstreamAuthType::BEARER,
+            'token' => encrypt($token),
+            'enabled' => true,
+        ]);
     }
 }

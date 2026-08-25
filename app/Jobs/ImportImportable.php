@@ -42,7 +42,7 @@ class ImportImportable implements ShouldQueue
      */
     public function handle(): void
     {
-        $this->source->client()->import(
+        $this->source->vcsClient()->import(
             package: $this->package,
             importable: $this->importable,
         );

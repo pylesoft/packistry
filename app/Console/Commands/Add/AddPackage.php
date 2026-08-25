@@ -6,6 +6,7 @@ namespace App\Console\Commands\Add;
 
 use App\Actions\Packages\Inputs\StorePackageInput;
 use App\Actions\Packages\StorePackage;
+use App\Enums\SourceProvider;
 use App\Models\Repository;
 use App\Models\Source;
 use App\Sources\Client;
@@ -42,7 +43,7 @@ class AddPackage extends Command
     {
         $this->selectRepository();
         $source = $this->selectSource();
-        $this->client = $source->client();
+        $this->client = $source->vcsClient();
 
         $projects = $this->selectProjects();
 
@@ -84,6 +85,7 @@ class AddPackage extends Command
     {
         /** @var Collection<int, Source> $sources */
         $sources = Source::query()
+            ->where('provider', '!=', SourceProvider::COMPOSER)
             ->get()
             ->keyBy(fn (Source $source): int => $source->id);
 

@@ -29,7 +29,7 @@ class ImportTags implements ShouldQueue
     {
         $batch = $this->batch();
 
-        $this->source->client()->tags($this->project)
+        $this->source->vcsClient()->tags($this->project)
             ->each(function (Importable $tag) use ($batch): void {
                 $batch?->add(new ImportImportable(
                     $this->source,

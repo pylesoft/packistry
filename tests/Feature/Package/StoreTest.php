@@ -21,6 +21,9 @@ use function Pest\Laravel\postJson;
 
 it('stores', function (?User $user, int $status, SourceProvider $provider): void {
     $repository = Repository::factory()->create();
+    if ($user !== null && $status === 201) {
+        $user->repositories()->attach($repository);
+    }
     $source = Source::factory()
         ->provider($provider)
         ->create();
@@ -161,4 +164,4 @@ it('stores', function (?User $user, int $status, SourceProvider $provider): void
         ]);
 })
     ->with(guestAndUsers(Permission::PACKAGE_CREATE, userWithPermission: 201))
-    ->with(SourceProvider::cases());
+    ->with(SourceProvider::vcsCases());

@@ -13,9 +13,23 @@ enum SourceProvider: string
     case GITHUB = 'github';
     case GITLAB = 'gitlab';
     case BITBUCKET = 'bitbucket';
+    case COMPOSER = 'composer';
+
+    /** @return list<self> */
+    public static function vcsCases(): array
+    {
+        return array_filter(
+            self::cases(),
+            fn (self $provider): bool => $provider !== self::COMPOSER,
+        );
+    }
 
     public function clientClassString(): string
     {
+        if ($this === self::COMPOSER) {
+            throw new RuntimeException('Composer sources do not use the VCS client contract.');
+        }
+
         $class = config()->string("services.$this->value.client");
 
         if (! is_subclass_of($class, Client::class)) {

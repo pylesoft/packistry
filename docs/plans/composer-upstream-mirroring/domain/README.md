@@ -12,7 +12,7 @@
 
 ## Entities
 
-- `ComposerUpstream`: connection, encrypted authentication, enabled state, and last successful validation time.
+- Existing `Source`: VCS or Composer connection, with Composer-specific encrypted authentication, enabled state, and last successful validation time when applicable.
 - Existing `Package`: downstream package plus optional upstream ownership and synchronization health.
 - Existing `Version`: normalized metadata backed by a synchronized immutable archive.
 
@@ -26,4 +26,4 @@
 
 ## Boundaries
 
-`ComposerUpstream` owns Composer-registry communication. Existing VCS `Source` clients remain responsible for Git hosting integrations. Existing repository authorization remains responsible for downstream access.
+`Source` owns package origin and credentials. Its provider selects either the existing VCS client capability or the Composer-registry client capability; neither client implements operations the provider cannot support. Existing repository authorization remains responsible for downstream access.

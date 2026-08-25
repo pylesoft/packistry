@@ -6,7 +6,7 @@ namespace App\Composer;
 
 use App\Enums\ComposerUpstreamAuthType;
 use App\Exceptions\ComposerUpstreamException;
-use App\Models\ComposerUpstream;
+use App\Models\Source;
 use Composer\MetadataMinifier\MetadataMinifier;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
@@ -23,7 +23,7 @@ readonly class ComposerUpstreamClient
     private const int MAX_PACKAGE_VERSIONS = 10_000;
 
     public function __construct(
-        private ComposerUpstream $upstream,
+        private Source $upstream,
         private ?OutboundUrlGuard $urlGuard = null,
     ) {}
 
@@ -220,12 +220,12 @@ readonly class ComposerUpstreamClient
 
             if ($this->sameOrigin($url, $this->upstream->url)) {
                 $request = match ($this->upstream->auth_type) {
-                    ComposerUpstreamAuthType::NONE => $request,
+                    ComposerUpstreamAuthType::NONE, null => $request,
                     ComposerUpstreamAuthType::BASIC => $request->withBasicAuth(
-                        (string) $this->upstream->username,
-                        (string) $this->upstream->password,
+                        (string) $this->upstream->composerUsername(),
+                        (string) $this->upstream->composerPassword(),
                     ),
-                    ComposerUpstreamAuthType::BEARER => $request->withToken((string) $this->upstream->token),
+                    ComposerUpstreamAuthType::BEARER => $request->withToken((string) $this->upstream->composerToken()),
                 };
             }
 

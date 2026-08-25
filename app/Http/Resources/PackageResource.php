@@ -35,7 +35,6 @@ class PackageResource extends JsonResource
             'versions' => VersionResource::collection($this->whenLoaded('versions')),
             'repository' => new RepositoryResource($this->whenLoaded('repository')),
             'source' => new SourceResource($this->whenLoaded('source')),
-            'composer_upstream' => new ComposerUpstreamResource($this->whenLoaded('composerUpstream')),
             'upstream_checked_at' => array_key_exists('upstream_checked_at', $attributes)
                 ? $this->upstream_checked_at
                 : null,

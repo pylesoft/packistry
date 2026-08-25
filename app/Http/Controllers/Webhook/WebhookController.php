@@ -57,7 +57,7 @@ abstract readonly class WebhookController extends Controller
             ->where('provider_id', $event->id())
             ->firstOrFail();
 
-        $client = $package->source?->client();
+        $client = $package->source?->vcsClient();
 
         if (is_null($client)) {
             return response()->json([

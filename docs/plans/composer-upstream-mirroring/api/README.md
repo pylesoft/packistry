@@ -4,10 +4,11 @@
 
 | Method | Path | Request | Response | Authorization |
 | --- | --- | --- | --- | --- |
-| POST | `/api/composer-upstreams` | connection and auth fields | upstream resource | Admin/source management permission |
-| POST | `/api/composer-upstreams/{upstream}/packages` | target repository and package name | package resource or accepted batch | Admin/package management permission |
-| POST | `/api/composer-upstreams/{upstream}/refresh` | optional `package_id` | `202` with accepted batch IDs and any skipped package IDs | Admin/package management permission |
-| PATCH | `/api/composer-upstreams/{upstream}` | connection, auth, enabled | upstream resource | Admin/source management permission |
+| POST | `/api/sources` | provider plus connection and provider-specific auth fields | source resource | Source create permission |
+| PATCH | `/api/sources/{source}` | connection, auth, enabled | source resource | Source update permission |
+| DELETE | `/api/sources/{source}` | none | deleted source resource | Source delete permission |
+| POST | `/api/packages` | repository, source, and either VCS projects or one Composer package name | package resource collection | Package create permission |
+| POST | `/api/packages/{package}/rebuild` | none | package resource | Package update permission |
 
 ## Payloads
 
@@ -15,4 +16,4 @@
 
 Use the existing validation-error shape. Do not relay raw upstream bodies when they may contain credentials or vendor-sensitive details.
 
-The upstream-wide refresh endpoint is intentionally partial when a package already has an active refresh lock. It returns `accepted`, `batch_ids`, `skipped_package_ids`, and `skipped_count`; scheduled duplicate dispatches remain silent skips. The package-level manual refresh and enrollment endpoints return `409` when their package is already synchronizing.
+Composer credentials are write-only. Source responses expose only `has_credentials`, authentication type, enabled state, and validation time. Composer package enrollment returns `409` when that package is already synchronizing; scheduled duplicate dispatches remain silent skips.

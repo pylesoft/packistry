@@ -10,6 +10,7 @@ use App\Actions\Sources\Inputs\UpdateSourceInput;
 use App\Actions\Sources\StoreSource;
 use App\Actions\Sources\UpdateSource;
 use App\Enums\Permission;
+use App\Enums\SourceProvider;
 use App\Http\Resources\SourceResource;
 use App\Models\Source;
 use Illuminate\Http\Client\ConnectionException;
@@ -32,7 +33,7 @@ readonly class SourceController extends Controller
     {
         $this->authorize(Permission::SOURCE_READ);
 
-        $sources = Source::query()->get();
+        $sources = Source::query()->withCount('packages')->get();
 
         return response()->json(
             SourceResource::collection($sources)
@@ -94,8 +95,14 @@ readonly class SourceController extends Controller
         /** @var Source $source */
         $source = Source::query()->findOrFail($sourceId);
 
+        if ($source->provider === SourceProvider::COMPOSER) {
+            throw ValidationException::withMessages([
+                'source' => 'Composer sources do not expose VCS projects.',
+            ]);
+        }
+
         try {
-            $projects = $source->client()
+            $projects = $source->vcsClient()
                 ->projects($request->input('search'));
         } catch (RequestException $e) {
             if ($e->getCode() === 401) {

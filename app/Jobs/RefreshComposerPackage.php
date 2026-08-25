@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Composer\SynchronizeComposerPackage;
+use App\Enums\SourceProvider;
 use App\Models\Package;
 use Illuminate\Bus\Batch;
 use Illuminate\Bus\Batchable;
@@ -59,8 +60,8 @@ class RefreshComposerPackage implements ShouldQueue
     {
         try {
             /** @var Package|null $package */
-            $package = Package::query()->with('composerUpstream')->find($this->packageId);
-            if ($package === null || $package->composer_upstream_id === null || $package->composerUpstream?->enabled !== true) {
+            $package = Package::query()->with('source')->find($this->packageId);
+            if ($package === null || $package->source?->provider !== SourceProvider::COMPOSER || $package->source->enabled !== true) {
                 $this->releaseLock();
 
                 return;
@@ -80,7 +81,7 @@ class RefreshComposerPackage implements ShouldQueue
     public function failed(?Throwable $exception): void
     {
         try {
-            $package = Package::query()->with('composerUpstream')->find($this->packageId);
+            $package = Package::query()->with('source')->find($this->packageId);
             if ($package !== null) {
                 $this->markUnhealthy($package);
             }
