@@ -29,6 +29,11 @@ enum Permission: string
     case SOURCE_UPDATE = 'source_update';
     case SOURCE_DELETE = 'source_delete';
 
+    case COMPOSER_UPSTREAM_CREATE = 'composer_upstream_create';
+    case COMPOSER_UPSTREAM_READ = 'composer_upstream_read';
+    case COMPOSER_UPSTREAM_UPDATE = 'composer_upstream_update';
+    case COMPOSER_UPSTREAM_DELETE = 'composer_upstream_delete';
+
     case DEPLOY_TOKEN_CREATE = 'deploy_token_create';
     case DEPLOY_TOKEN_READ = 'deploy_token_read';
     case DEPLOY_TOKEN_UPDATE = 'deploy_token_update';

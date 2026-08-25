@@ -19,6 +19,7 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property int $repository_id
  * @property int|null $source_id
+ * @property int|null $composer_upstream_id
  * @property string|null $provider_id
  * @property string $name
  * @property string|null $latest_version
@@ -29,6 +30,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property-read Repository $repository
  * @property-read Source|null $source
+ * @property-read ComposerUpstream|null $composerUpstream
  * @property-read Collection<int, Version> $versions
  * @property-read int|null $versions_count
  *
@@ -62,6 +64,14 @@ class Package extends Model
     public function source(): BelongsTo
     {
         return $this->belongsTo(Source::class);
+    }
+
+    /**
+     * @return BelongsTo<ComposerUpstream, $this>
+     */
+    public function composerUpstream(): BelongsTo
+    {
+        return $this->belongsTo(ComposerUpstream::class);
     }
 
     /**

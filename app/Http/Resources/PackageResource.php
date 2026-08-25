@@ -33,6 +33,7 @@ class PackageResource extends JsonResource
             'versions' => VersionResource::collection($this->whenLoaded('versions')),
             'repository' => new RepositoryResource($this->whenLoaded('repository')),
             'source' => new SourceResource($this->whenLoaded('source')),
+            'composer_upstream' => new ComposerUpstreamResource($this->whenLoaded('composerUpstream')),
             'description' => $this->description,
             'total_downloads' => $this->total_downloads,
             'created_at' => $this->created_at,

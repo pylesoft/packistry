@@ -22,6 +22,17 @@ class CreateFromZip
     use ComposerFromZip;
 
     /**
+     * @return array<string, mixed>
+     *
+     * @throws ComposerJsonNotFoundException
+     * @throws FailedToOpenArchiveException
+     */
+    public function metadata(string $path): array
+    {
+        return $this->decodedComposerJsonFromZip($path);
+    }
+
+    /**
      * @throws VersionNotFoundException
      * @throws ComposerJsonNotFoundException
      * @throws FailedToOpenArchiveException

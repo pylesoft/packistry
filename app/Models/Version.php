@@ -30,6 +30,7 @@ use Override;
  * @property Carbon|null $updated_at
  * @property int $total_downloads
  * @property string|null $archive_path
+ * @property Carbon|null $upstream_removed_at
  * @property-read Collection<int, Download> $downloads
  * @property-read int|null $downloads_count
  * @property-read Package $package
@@ -50,6 +51,7 @@ class Version extends Model
 
     protected $casts = [
         'metadata' => 'json',
+        'upstream_removed_at' => 'datetime',
     ];
 
     protected $guarded = [];
