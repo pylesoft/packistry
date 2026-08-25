@@ -35,18 +35,22 @@ function PackagesComponent() {
     const { can } = useAuth()
     const downloads = usePackageDownloads(packageId)
     const versions = usePackageVersions(packageId, search)
+    const canReadBatches = !!query.data?.composerUpstream && can(BATCH_READ)
     const batches = useBatches({
-        refetchInterval: query.data?.composerUpstream && can(BATCH_READ) ? 3000 : undefined,
-        enabled: !!query.data?.composerUpstream && can(BATCH_READ),
+        enabled: canReadBatches,
+        pollWhile: (items) =>
+            (items || []).some(
+                (batch) =>
+                    batch.package?.id === query.data?.id && batch.finishedAt === null && batch.cancelledAt === null
+            ),
     })
     const command = `composer require ${query.data?.name}`
-    const refreshActive = !!query.data?.composerUpstream && can(BATCH_READ) &&
+    const refreshActive =
+        canReadBatches &&
         (batches.data || []).some(
-            (batch) =>
-                batch.package?.id === query.data?.id &&
-                batch.finishedAt === null &&
-                batch.cancelledAt === null
+            (batch) => batch.package?.id === query.data?.id && batch.finishedAt === null && batch.cancelledAt === null
         )
+    useRefetchPackageWhenRefreshFinishes(packageId, refreshActive, query.refetch)
 
     if (is404(query)) {
         return (
@@ -72,27 +76,30 @@ function PackagesComponent() {
                 </div>
             </Heading>
             <DownloadsCard data={downloads.data} />
-            <div className="flex flex-wrap gap-4 items-start">
+            <div className="grid gap-4 md:grid-cols-2 items-stretch">
                 {query.data?.repository ? (
                     <RepositoryCard
-                        className="w-1/2"
+                        className="h-full"
                         repository={query.data.repository}
                     />
                 ) : (
-                    <LoadingRepositoryCard className="w-1/2" />
+                    <LoadingRepositoryCard className="h-full" />
                 )}
                 {query.data?.source ? (
                     <SourceCard
-                        className="w-1/2"
+                        className="h-full"
                         source={query.data.source}
                     />
                 ) : (
-                    query.data?.source === undefined && <LoadingSourceCard className="w-1/2" />
+                    query.data?.source === undefined && <LoadingSourceCard className="h-full" />
                 )}
                 {query.data?.composerUpstream && (
                     <ComposerUpstreamPackageCard
                         upstream={query.data.composerUpstream}
                         packageId={query.data.id}
+                        lastCheckedAt={query.data.upstreamCheckedAt}
+                        lastSyncedAt={query.data.upstreamSyncedAt}
+                        lastError={query.data.upstreamLastError}
                         refreshActive={refreshActive}
                     />
                 )}
@@ -109,4 +116,26 @@ function PackagesComponent() {
             />
         </>
     )
+}
+
+function useRefetchPackageWhenRefreshFinishes(
+    packageId: string,
+    refreshActive: boolean,
+    refetchPackage: () => Promise<unknown>
+) {
+    const previous = React.useRef({ packageId, refreshActive: false })
+
+    React.useEffect(() => {
+        if (previous.current.packageId !== packageId) {
+            previous.current = { packageId, refreshActive }
+
+            return
+        }
+
+        if (previous.current.refreshActive && !refreshActive) {
+            void refetchPackage()
+        }
+
+        previous.current.refreshActive = refreshActive
+    }, [packageId, refreshActive, refetchPackage])
 }

@@ -25,8 +25,10 @@ export function EnrollComposerPackageDialog(props: DialogProps) {
             upstreamId: '',
             name: '',
         },
-        onSuccess() {
-            toast('Composer package synchronization has been started')
+        onSuccess(result) {
+            toast(`${result.package.name} synchronization has been started`, {
+                description: `Batch ${result.batchId}`,
+            })
             form.reset()
             dialogProps.onOpenChange?.(false)
         },
@@ -47,7 +49,10 @@ export function EnrollComposerPackageDialog(props: DialogProps) {
                     <DialogTitle>Enroll Composer package</DialogTitle>
                 </DialogHeader>
                 <Form {...form}>
-                    <form onSubmit={onSubmit} className="space-y-4">
+                    <form
+                        onSubmit={onSubmit}
+                        className="space-y-4"
+                    >
                         <FormRepositorySelect
                             name="repositoryId"
                             description="Select the existing repository that will serve this package."
@@ -64,7 +69,10 @@ export function EnrollComposerPackageDialog(props: DialogProps) {
                             description="Enter one exact Composer package name, such as dedoc/scramble-pro."
                             control={form.control}
                         />
-                        <Button type="submit" loading={isPending}>
+                        <Button
+                            type="submit"
+                            loading={isPending}
+                        >
                             Start synchronization
                         </Button>
                     </form>

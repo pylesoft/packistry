@@ -49,9 +49,15 @@ export function AddComposerUpstreamDialog(props: DialogProps) {
                     <DialogTitle>Add Composer upstream</DialogTitle>
                 </DialogHeader>
                 <Form {...form}>
-                    <form onSubmit={onSubmit} className="space-y-4">
+                    <form
+                        onSubmit={onSubmit}
+                        className="space-y-4"
+                    >
                         <ComposerUpstreamFormElements form={form} />
-                        <Button loading={isPending} type="submit">
+                        <Button
+                            loading={isPending}
+                            type="submit"
+                        >
                             Add upstream
                         </Button>
                     </form>

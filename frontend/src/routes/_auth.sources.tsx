@@ -123,10 +123,16 @@ function PageContent({
     return (
         <Grid>
             {sources.map((source) => (
-                <SourceCard key={source.id} source={source} />
+                <SourceCard
+                    key={source.id}
+                    source={source}
+                />
             ))}
             {composerUpstreams.map((upstream) => (
-                <ComposerUpstreamCard key={`composer-${upstream.id}`} upstream={upstream} />
+                <ComposerUpstreamCard
+                    key={`composer-${upstream.id}`}
+                    upstream={upstream}
+                />
             ))}
         </Grid>
     )

@@ -9,7 +9,10 @@ import { ComposerUpstream, updateComposerUpstreamInput } from '@/api'
 import { DialogProps } from '@radix-ui/react-dialog'
 import { ReactNode, useState } from 'react'
 
-export function EditComposerUpstreamDialog({ upstream, trigger }: { upstream: ComposerUpstream; trigger?: ReactNode } & DialogProps) {
+export function EditComposerUpstreamDialog({
+    upstream,
+    trigger,
+}: { upstream: ComposerUpstream; trigger?: ReactNode } & DialogProps) {
     const mutation = useUpdateComposerUpstream()
     const [open, setOpen] = useState(false)
     const { form, onSubmit, isPending } = useForm({
@@ -33,16 +36,28 @@ export function EditComposerUpstreamDialog({ upstream, trigger }: { upstream: Co
     })
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog
+            open={open}
+            onOpenChange={setOpen}
+        >
             <DialogTrigger asChild>{trigger || <Button>Edit upstream</Button>}</DialogTrigger>
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Manage Composer upstream</DialogTitle>
                 </DialogHeader>
                 <Form {...form}>
-                    <form onSubmit={onSubmit} className="space-y-4">
-                        <ComposerUpstreamFormElements edit form={form} />
-                        <Button loading={isPending} type="submit">
+                    <form
+                        onSubmit={onSubmit}
+                        className="space-y-4"
+                    >
+                        <ComposerUpstreamFormElements
+                            edit
+                            form={form}
+                        />
+                        <Button
+                            loading={isPending}
+                            type="submit"
+                        >
                             Save changes
                         </Button>
                     </form>

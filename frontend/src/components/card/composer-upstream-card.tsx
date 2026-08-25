@@ -1,18 +1,18 @@
 import * as React from 'react'
-import { ExternalLinkIcon, Globe2, ShieldCheck, ShieldOff } from 'lucide-react'
-import { ComposerUpstream, composerUpstreamStatus } from '@/api'
+import { ExternalLinkIcon, Globe2, ShieldCheck } from 'lucide-react'
+import { ComposerUpstream } from '@/api'
 import { useAuth } from '@/auth'
-import { COMPOSER_UPSTREAM_UPDATE } from '@/permission'
+import { COMPOSER_UPSTREAM_DELETE, COMPOSER_UPSTREAM_UPDATE } from '@/permission'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { EditComposerUpstreamDialog } from '@/components/dialog/edit-composer-upstream-dialog'
 import { cn } from '@/lib/utils'
+import { DeleteComposerUpstreamButton } from '@/components/button/delete-composer-upstream-button'
 
 export function ComposerUpstreamCard({ upstream, className }: { upstream: ComposerUpstream; className?: string }) {
     const { can } = useAuth()
-    const status = composerUpstreamStatus(upstream)
-    const StatusIcon = status === 'healthy' ? ShieldCheck : status === 'unhealthy' ? ShieldOff : Globe2
+    const validated = !!upstream.lastCheckedAt
 
     return (
         <Card className={cn('overflow-hidden', className)}>
@@ -27,44 +27,62 @@ export function ComposerUpstreamCard({ upstream, className }: { upstream: Compos
                 <div className="p-6 pt-4 space-y-4">
                     <div className="flex flex-wrap gap-2 items-center">
                         <Badge variant="outline">COMPOSER</Badge>
-                        <Badge variant="outline" className="capitalize">
+                        <Badge
+                            variant="outline"
+                            className="capitalize"
+                        >
                             {upstream.authType === 'basic' ? 'HTTP Basic' : upstream.authType}
                         </Badge>
                         <Badge
                             variant="outline"
-                            className={cn(
-                                'capitalize',
-                                status === 'healthy' && 'bg-green-500/10 text-green-600 border-green-500/20',
-                                status === 'unhealthy' && 'bg-red-500/10 text-red-600 border-red-500/20'
-                            )}
+                            className={cn(validated && 'bg-green-500/10 text-green-600 border-green-500/20')}
                         >
-                            <StatusIcon className="h-3.5 w-3.5 mr-1" />
-                            {status}
+                            {validated && <ShieldCheck className="h-3.5 w-3.5 mr-1" />}
+                            {validated ? 'Validated' : 'Not validated'}
                         </Badge>
                     </div>
                     <div className="flex items-center justify-between text-sm text-muted-foreground">
                         <span>{upstream.hasCredentials ? 'Credentials configured' : 'No credentials'}</span>
                         <span>{upstream.enabled ? 'Enabled' : 'Disabled'}</span>
                     </div>
-                    {upstream.lastError && <p className="text-sm text-destructive line-clamp-2">{upstream.lastError}</p>}
                     <div className="flex space-x-2">
                         {can(COMPOSER_UPSTREAM_UPDATE) && (
                             <EditComposerUpstreamDialog
                                 upstream={upstream}
                                 trigger={
-                                    <Button variant="outline" size="sm" className="w-full">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="w-full"
+                                    >
                                         Manage
                                     </Button>
                                 }
                             />
                         )}
-                        <a href={upstream.url} className="w-full" rel="noreferrer" target="_blank" tabIndex={-1}>
-                            <Button variant="outline" size="sm" className="w-full">
+                        <a
+                            href={upstream.url}
+                            className="w-full"
+                            rel="noreferrer"
+                            target="_blank"
+                            tabIndex={-1}
+                        >
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full"
+                            >
                                 <ExternalLinkIcon className="h-4 w-4 mr-2" />
                                 Open
                             </Button>
                         </a>
                     </div>
+                    {can(COMPOSER_UPSTREAM_DELETE) && (
+                        <DeleteComposerUpstreamButton
+                            upstream={upstream}
+                            className="w-full text-destructive"
+                        />
+                    )}
                 </div>
             </CardContent>
         </Card>

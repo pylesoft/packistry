@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
     deleteDeployToken,
+    deleteComposerUpstream,
     deletePackage,
     deletePersonalToken,
     deleteRepository,
@@ -38,7 +39,6 @@ import {
     enrollComposerPackage,
     fetchComposerUpstreams,
     refreshComposerPackage,
-    refreshComposerUpstream,
     storeComposerUpstream,
     StoreComposerUpstreamInput,
     updateComposerUpstream,
@@ -54,7 +54,7 @@ import {
     storeAuthenticationSource,
     updateAuthenticationSource,
 } from '@/api/authentication-source'
-import { fetchBatches, pruneBatches } from '@/api/batch'
+import { Batch, fetchBatches, pruneBatches } from '@/api/batch'
 
 const repositoriesKey = ['repositories']
 const packagesKey = ['packages']
@@ -290,6 +290,20 @@ export function useUpdateComposerUpstream() {
     })
 }
 
+export function useDeleteComposerUpstream() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: deleteComposerUpstream,
+        onSuccess() {
+            queryClient.invalidateQueries({
+                queryKey: composerUpstreamsKey,
+                exact: false,
+            })
+        },
+    })
+}
+
 export function useEnrollComposerPackage() {
     const queryClient = useQueryClient()
 
@@ -297,28 +311,6 @@ export function useEnrollComposerPackage() {
         mutationFn: ({ upstreamId, ...input }: EnrollComposerPackageInput & { upstreamId: string }) =>
             enrollComposerPackage(upstreamId, input),
         onSuccess() {
-            queryClient.invalidateQueries({
-                queryKey: packagesKey,
-                exact: false,
-            })
-            queryClient.invalidateQueries({
-                queryKey: batchesKey,
-                exact: false,
-            })
-        },
-    })
-}
-
-export function useRefreshComposerUpstream() {
-    const queryClient = useQueryClient()
-
-    return useMutation({
-        mutationFn: refreshComposerUpstream,
-        onSuccess() {
-            queryClient.invalidateQueries({
-                queryKey: composerUpstreamsKey,
-                exact: false,
-            })
             queryClient.invalidateQueries({
                 queryKey: packagesKey,
                 exact: false,
@@ -570,11 +562,21 @@ export function useDeleteAuthenticationSource() {
     })
 }
 
-export function useBatches({ refetchInterval, enabled = true }: { refetchInterval?: number; enabled?: boolean }) {
+export function useBatches({
+    refetchInterval,
+    pollWhile,
+    enabled = true,
+}: {
+    refetchInterval?: number
+    pollWhile?: (batches: Batch[] | undefined) => boolean
+    enabled?: boolean
+}) {
     return useQuery({
         queryFn: fetchBatches,
         queryKey: [...batchesKey],
-        refetchInterval,
+        refetchInterval: pollWhile
+            ? (query) => (pollWhile(query.state.data) ? refetchInterval || 3000 : false)
+            : refetchInterval,
         enabled,
     })
 }

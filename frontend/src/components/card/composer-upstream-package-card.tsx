@@ -2,7 +2,7 @@ import * as React from 'react'
 import { formatDistance } from 'date-fns'
 import { RefreshCw, ShieldCheck, ShieldOff } from 'lucide-react'
 import { toast } from 'sonner'
-import { ComposerUpstream, composerUpstreamStatus } from '@/api'
+import { ComposerUpstream } from '@/api'
 import { useRefreshComposerPackage } from '@/api/hooks'
 import { useAuth } from '@/auth'
 import { PACKAGE_UPDATE } from '@/permission'
@@ -14,29 +14,41 @@ import { cn } from '@/lib/utils'
 export function ComposerUpstreamPackageCard({
     upstream,
     packageId,
+    lastCheckedAt,
+    lastSyncedAt,
+    lastError,
     refreshActive = false,
 }: {
     upstream: ComposerUpstream
     packageId: string
+    lastCheckedAt?: Date | null
+    lastSyncedAt?: Date | null
+    lastError?: string | null
     refreshActive?: boolean
 }) {
     const mutation = useRefreshComposerPackage()
     const { can } = useAuth()
-    const status = composerUpstreamStatus(upstream)
+    const status = lastError ? 'unhealthy' : lastCheckedAt || lastSyncedAt ? 'healthy' : 'unknown'
     const refreshing = refreshActive || mutation.isPending
 
     function refresh() {
         mutation.mutate(packageId, {
-            onSuccess: () => toast('Composer package refresh has been started'),
+            onSuccess: ({ batchId }) =>
+                toast('Composer package refresh has been started', {
+                    description: `Batch ${batchId}`,
+                }),
         })
     }
 
     return (
-        <Card className="w-1/2">
+        <Card className="h-full">
             <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-3">
                     <CardTitle className="text-base">Composer upstream</CardTitle>
-                    <Badge variant="outline" className="capitalize">
+                    <Badge
+                        variant="outline"
+                        className="capitalize"
+                    >
                         {status === 'healthy' ? (
                             <ShieldCheck className="h-3.5 w-3.5 mr-1 text-green-600" />
                         ) : status === 'unhealthy' ? (
@@ -54,12 +66,12 @@ export function ComposerUpstreamPackageCard({
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
                     <span>{upstream.enabled ? 'Enabled' : 'Disabled'}</span>
                     <span>
-                        {upstream.lastSyncedAt
-                            ? `Synced ${formatDistance(upstream.lastSyncedAt, new Date(), { addSuffix: true })}`
+                        {lastSyncedAt
+                            ? `Synced ${formatDistance(lastSyncedAt, new Date(), { addSuffix: true })}`
                             : 'Not synchronized yet'}
                     </span>
                 </div>
-                {upstream.lastError && <p className="text-sm text-destructive line-clamp-2">{upstream.lastError}</p>}
+                {lastError && <p className="text-sm text-destructive line-clamp-2">{lastError}</p>}
                 {can(PACKAGE_UPDATE) && (
                     <Button
                         variant="outline"
