@@ -876,3 +876,37 @@ it('hides removed upstream versions while preserving their locked archive downlo
     expect($removedVersion->fresh()->upstream_removed_at)->not->toBeNull();
     expect($package->fresh()->latest_version)->toBe('1.0.0');
 });
+
+it('rejects an empty upstream snapshot without hiding mirrored versions', function (): void {
+    Storage::fake();
+    $repository = Repository::factory()->root()->public()->create();
+    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $package = Package::factory()->for($repository)->create([
+        'name' => 'test/test',
+        'composer_upstream_id' => $upstream->id,
+    ]);
+    $archive = file_get_contents(__DIR__.'/../Fixtures/project.zip');
+    assertNotNull($archive);
+    $versions = [[
+        'name' => 'test/test',
+        'version' => '1.0.0',
+        'dist' => ['type' => 'zip', 'url' => 'https://private.example.test/1.zip', 'shasum' => sha1($archive)],
+    ]];
+
+    Http::fake(function ($request) use (&$versions, $archive) {
+        if ($request->url() === 'https://private.example.test/p2/test/test.json') {
+            return Http::response(['packages' => ['test/test' => $versions]]);
+        }
+
+        return Http::response($archive, 200, ['content-type' => 'application/zip']);
+    });
+
+    app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream']));
+    $versions = [];
+
+    expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream'])))
+        ->toThrow(ComposerUpstreamException::class, 'Composer upstream returned invalid package metadata.');
+
+    expect($package->versions()->firstOrFail()->upstream_removed_at)->toBeNull()
+        ->and($package->fresh()->latest_version)->toBe('1.0.0');
+});

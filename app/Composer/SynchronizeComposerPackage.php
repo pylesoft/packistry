@@ -40,7 +40,7 @@ readonly class SynchronizeComposerPackage
         $seen = [];
 
         $versions = $metadata['versions'] ?? null;
-        if (! is_array($versions)) {
+        if (! is_array($versions) || $versions === []) {
             throw new ComposerUpstreamException('Composer upstream returned invalid package metadata.');
         }
 
