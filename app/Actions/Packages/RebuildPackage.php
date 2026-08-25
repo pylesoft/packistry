@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Actions\Packages;
 
 use App\Jobs\Batches\PackageImportBatch;
+use App\Jobs\RefreshComposerPackage;
 use App\Models\Package;
 use RuntimeException;
 use Throwable;
@@ -16,6 +17,12 @@ class RebuildPackage
      */
     public function handle(Package $package): void
     {
+        if ($package->composer_upstream_id !== null) {
+            RefreshComposerPackage::dispatchFor($package);
+
+            return;
+        }
+
         $source = $package->source;
 
         if ($source === null || $package->provider_id === null) {

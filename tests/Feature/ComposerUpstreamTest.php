@@ -466,7 +466,7 @@ it('dispatches an observable batch with the package option', function (): void {
             && $job instanceof RefreshComposerPackage
             && ! property_exists($job, 'metadata')
             && $job->timeout === 3600
-            && $job->tries === 1
+            && $job->tries === 3
             && $job->failOnTimeout
             && $middleware instanceof WithoutOverlapping
             && $middleware->releaseAfter === null
