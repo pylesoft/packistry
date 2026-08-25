@@ -17,7 +17,7 @@ import { PackageIcon } from 'lucide-react'
 import { is404 } from '@/api/axios'
 import { CopyCommandTooltip } from '@/components/ui/tooltip'
 import { PackageActionsDropdownMenu } from '@/components/dropdown-menu/package-actions-dropdown-menu'
-import { ComposerUpstreamPackageCard } from '@/components/card/composer-upstream-package-card'
+import { ComposerSourcePackageCard } from '@/components/card/composer-source-package-card'
 import { useAuth } from '@/auth'
 import { BATCH_READ } from '@/permission'
 
@@ -35,7 +35,8 @@ function PackagesComponent() {
     const { can } = useAuth()
     const downloads = usePackageDownloads(packageId)
     const versions = usePackageVersions(packageId, search)
-    const canReadBatches = !!query.data?.composerUpstream && can(BATCH_READ)
+    const composerSource = query.data?.source?.provider === 'composer' ? query.data.source : undefined
+    const canReadBatches = !!composerSource && can(BATCH_READ)
     const batches = useBatches({
         enabled: canReadBatches,
         pollWhile: (items) =>
@@ -93,9 +94,9 @@ function PackagesComponent() {
                 ) : (
                     query.data?.source === undefined && <LoadingSourceCard className="h-full" />
                 )}
-                {query.data?.composerUpstream && (
-                    <ComposerUpstreamPackageCard
-                        upstream={query.data.composerUpstream}
+                {composerSource && query.data && (
+                    <ComposerSourcePackageCard
+                        source={composerSource}
                         packageId={query.data.id}
                         lastCheckedAt={query.data.upstreamCheckedAt}
                         lastSyncedAt={query.data.upstreamSyncedAt}

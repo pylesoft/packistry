@@ -22,9 +22,21 @@ export function EditSourceDialog({ source, trigger }: EditSourceDialogProps) {
 
     const { form, onSubmit, isPending } = useForm({
         mutation,
-        defaultValues: source,
+        defaultValues: {
+            id: source.id,
+            name: source.name,
+            provider: source.provider,
+            url: source.url,
+            metadata: 'metadata' in source ? source.metadata : {},
+            token: '',
+            authType: source.provider === 'composer' ? source.authType : undefined,
+            username: '',
+            password: '',
+            enabled: source.provider === 'composer' ? source.enabled : undefined,
+        },
         onSuccess() {
             form.setValue('token', '')
+            form.setValue('password', '')
             setIsDialogOpen(false)
         },
     })
@@ -55,6 +67,8 @@ export function EditSourceDialog({ source, trigger }: EditSourceDialogProps) {
                     >
                         <SourceFormElements
                             disableProvider
+                            existingComposerAuthType={source.provider === 'composer' ? source.authType : undefined}
+                            hasCredentials={source.provider === 'composer' && source.hasCredentials}
                             form={form}
                         />
                         <div className="flex justify-between">

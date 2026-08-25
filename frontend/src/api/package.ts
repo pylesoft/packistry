@@ -4,7 +4,6 @@ import { paginated, paginatedQuery, toQueryString } from '@/api/pagination'
 import { versionSchema } from '@/api/version'
 import { repository } from '@/api/repository'
 import { source } from '@/api/source'
-import { composerUpstream } from '@/api/composer-upstream'
 
 export const packageSchema = z.object({
     id: z.coerce.string(),
@@ -12,7 +11,6 @@ export const packageSchema = z.object({
     repositoryId: z.number(),
     repository: repository.optional(),
     source: source.optional().nullable(),
-    composerUpstream: composerUpstream.optional().nullable(),
     upstreamCheckedAt: z.coerce.date().nullable().optional(),
     upstreamSyncedAt: z.coerce.date().nullable().optional(),
     upstreamLastError: z.string().nullable().optional(),
@@ -58,12 +56,19 @@ export function fetchPackageDownloads(packageId: string | number) {
 export const storePackageInput = z.object({
     repository: z.string(),
     source: z.string(),
-    projects: z.string().array(),
-    webhook: z.boolean(),
+    projects: z.string().array().optional(),
+    webhook: z.boolean().optional(),
+    name: z.string().optional(),
 })
 
 export function storePackage(input: z.infer<typeof storePackageInput>) {
-    return post(packageSchema.array(), '/packages', input)
+    const { name, projects, webhook, ...base } = input
+
+    return post(packageSchema.array(), '/packages', {
+        ...base,
+        ...(name ? { name } : {}),
+        ...(projects?.length ? { projects, webhook } : {}),
+    })
 }
 
 export function deletePackage(packageId: string) {
