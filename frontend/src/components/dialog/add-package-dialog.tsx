@@ -75,7 +75,7 @@ export function AddPackageDialog(props: AddPackageDialogProps) {
                                 name="name"
                                 label="Exact package name"
                                 placeholder="vendor/package"
-                                description="Enter one exact Composer package name, such as dedoc/scramble-pro."
+                                description="Enter the exact package name published by the Composer repository."
                                 control={form.control}
                             />
                         )}

@@ -84,8 +84,7 @@ export function SourceFormElements({
                             <FormInput
                                 name="username"
                                 label="Username"
-                                placeholder="Account email"
-                                description="Paid Composer repositories commonly use the account email here."
+                                description="Enter the username required by this Composer repository."
                                 control={form.control}
                             />
                             <FormInput
