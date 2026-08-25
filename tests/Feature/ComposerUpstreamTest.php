@@ -14,7 +14,6 @@ use App\Models\Package;
 use App\Models\Repository;
 use App\Models\Version;
 use Illuminate\Http\Client\ConnectionException;
-use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -459,18 +458,14 @@ it('dispatches an observable batch with the package option', function (): void {
 
     Bus::assertBatched(function ($batch): bool {
         $job = $batch->jobs->first();
-        $middleware = $job->middleware()[0] ?? null;
 
         return $batch->name === RefreshComposerPackage::class
             && $batch->options['package']->name === 'test/test'
             && $job instanceof RefreshComposerPackage
             && ! property_exists($job, 'metadata')
             && $job->timeout === 3600
-            && $job->tries === 1
-            && $job->failOnTimeout
-            && $middleware instanceof WithoutOverlapping
-            && $middleware->releaseAfter === null
-            && $middleware->expiresAfter === 3660;
+            && $job->tries === 3
+            && $job->failOnTimeout;
     });
 });
 

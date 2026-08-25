@@ -10,7 +10,6 @@ use Illuminate\Bus\Batch;
 use Illuminate\Bus\Batchable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Throwable;
@@ -24,7 +23,7 @@ class RefreshComposerPackage implements ShouldQueue
 
     public int $timeout = 3600;
 
-    public int $tries = 1;
+    public int $tries = 3;
 
     public bool $failOnTimeout = true;
 
@@ -88,16 +87,6 @@ class RefreshComposerPackage implements ShouldQueue
         } finally {
             $this->releaseLock();
         }
-    }
-
-    /** @return list<WithoutOverlapping> */
-    public function middleware(): array
-    {
-        return [
-            (new WithoutOverlapping('composer-package-sync:'.$this->packageId))
-                ->dontRelease()
-                ->expireAfter($this->timeout + 60),
-        ];
     }
 
     private static function lockKey(int $packageId): string
