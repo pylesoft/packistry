@@ -24,7 +24,7 @@ class RefreshComposerPackage implements ShouldQueue
 
     public int $timeout = 3600;
 
-    public int $tries = 1;
+    public int $tries = 3;
 
     public bool $failOnTimeout = true;
 
