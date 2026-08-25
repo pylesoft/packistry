@@ -23,8 +23,9 @@ class ComposerPackageResource extends JsonResource
     public function toArray(Request $request): array
     {
         $versions = $this->versions
+            ->filter(fn (Version $version): bool => $version->upstream_removed_at === null)
             ->map(fn (Version $version) => [
-                ...$version->metadata,
+                ...collect($version->metadata)->except('upstream_dist_identity')->all(),
                 'name' => $this->name,
                 'version' => $version->name,
                 'type' => $this->type,

@@ -4,6 +4,7 @@ import { paginated, paginatedQuery, toQueryString } from '@/api/pagination'
 import { versionSchema } from '@/api/version'
 import { repository } from '@/api/repository'
 import { source } from '@/api/source'
+import { composerUpstream } from '@/api/composer-upstream'
 
 export const packageSchema = z.object({
     id: z.coerce.string(),
@@ -11,6 +12,10 @@ export const packageSchema = z.object({
     repositoryId: z.number(),
     repository: repository.optional(),
     source: source.optional().nullable(),
+    composerUpstream: composerUpstream.optional().nullable(),
+    upstreamCheckedAt: z.coerce.date().nullable().optional(),
+    upstreamSyncedAt: z.coerce.date().nullable().optional(),
+    upstreamLastError: z.string().nullable().optional(),
     description: z.string().nullable(),
     totalDownloads: z.number(),
     latestVersion: z.string().nullable(),

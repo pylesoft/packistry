@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { usePackage, usePackageDownloads, usePackageVersions } from '@/api/hooks'
+import { useBatches, usePackage, usePackageDownloads, usePackageVersions } from '@/api/hooks'
 import { RepositoryCard } from '@/components/card/repository-card'
 import { SourceCard } from '@/components/card/source-card'
 import { LoadingRepositoryCard } from '@/components/card/loading-repository-card'
@@ -17,6 +17,9 @@ import { PackageIcon } from 'lucide-react'
 import { is404 } from '@/api/axios'
 import { CopyCommandTooltip } from '@/components/ui/tooltip'
 import { PackageActionsDropdownMenu } from '@/components/dropdown-menu/package-actions-dropdown-menu'
+import { ComposerUpstreamPackageCard } from '@/components/card/composer-upstream-package-card'
+import { useAuth } from '@/auth'
+import { BATCH_READ } from '@/permission'
 
 export const Route = createFileRoute('/_auth/packages/$packageId')({
     validateSearch: versionQuery,
@@ -29,9 +32,25 @@ function PackagesComponent() {
 
     const navigate = useNavigate()
     const query = usePackage(packageId)
+    const { can } = useAuth()
     const downloads = usePackageDownloads(packageId)
     const versions = usePackageVersions(packageId, search)
+    const canReadBatches = !!query.data?.composerUpstream && can(BATCH_READ)
+    const batches = useBatches({
+        enabled: canReadBatches,
+        pollWhile: (items) =>
+            (items || []).some(
+                (batch) =>
+                    batch.package?.id === query.data?.id && batch.finishedAt === null && batch.cancelledAt === null
+            ),
+    })
     const command = `composer require ${query.data?.name}`
+    const refreshActive =
+        canReadBatches &&
+        (batches.data || []).some(
+            (batch) => batch.package?.id === query.data?.id && batch.finishedAt === null && batch.cancelledAt === null
+        )
+    useRefetchPackageWhenRefreshFinishes(packageId, refreshActive, query.refetch)
 
     if (is404(query)) {
         return (
@@ -57,22 +76,32 @@ function PackagesComponent() {
                 </div>
             </Heading>
             <DownloadsCard data={downloads.data} />
-            <div className="flex gap-4 items-start">
+            <div className="grid gap-4 md:grid-cols-2 items-stretch">
                 {query.data?.repository ? (
                     <RepositoryCard
-                        className="w-1/2"
+                        className="h-full"
                         repository={query.data.repository}
                     />
                 ) : (
-                    <LoadingRepositoryCard className="w-1/2" />
+                    <LoadingRepositoryCard className="h-full" />
                 )}
                 {query.data?.source ? (
                     <SourceCard
-                        className="w-1/2"
+                        className="h-full"
                         source={query.data.source}
                     />
                 ) : (
-                    query.data?.source !== null && <LoadingSourceCard className="w-1/2" />
+                    query.data?.source === undefined && <LoadingSourceCard className="h-full" />
+                )}
+                {query.data?.composerUpstream && (
+                    <ComposerUpstreamPackageCard
+                        upstream={query.data.composerUpstream}
+                        packageId={query.data.id}
+                        lastCheckedAt={query.data.upstreamCheckedAt}
+                        lastSyncedAt={query.data.upstreamSyncedAt}
+                        lastError={query.data.upstreamLastError}
+                        refreshActive={refreshActive}
+                    />
                 )}
             </div>
             <SearchBar
@@ -87,4 +116,26 @@ function PackagesComponent() {
             />
         </>
     )
+}
+
+function useRefetchPackageWhenRefreshFinishes(
+    packageId: string,
+    refreshActive: boolean,
+    refetchPackage: () => Promise<unknown>
+) {
+    const previous = React.useRef({ packageId, refreshActive: false })
+
+    React.useEffect(() => {
+        if (previous.current.packageId !== packageId) {
+            previous.current = { packageId, refreshActive }
+
+            return
+        }
+
+        if (previous.current.refreshActive && !refreshActive) {
+            void refetchPackage()
+        }
+
+        previous.current.refreshActive = refreshActive
+    }, [packageId, refreshActive, refetchPackage])
 }

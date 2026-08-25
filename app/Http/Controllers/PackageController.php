@@ -84,6 +84,7 @@ readonly class PackageController extends Controller
                 }
             },
             'source',
+            'composerUpstream',
         ]);
 
         return response()->json(

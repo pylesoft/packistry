@@ -1,12 +1,12 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import * as React from 'react'
 import { ReactNode, useState } from 'react'
-import { useSources } from '@/api/hooks'
+import { useComposerUpstreams, useSources } from '@/api/hooks'
 import { AddSourceDialog } from '@/components/dialog/add-source-dialog'
+import { AddComposerUpstreamDialog } from '@/components/dialog/add-composer-upstream-dialog'
 import { Heading } from '@/components/page/heading'
 import { SourceCard } from '@/components/card/source-card'
 import FailedToLoad from '@/components/failed-to-load'
-import { Source } from '@/api'
 import { LoadingSourceCard } from '@/components/card/loading-source-card'
 import { Empty } from '@/components/empty'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,10 @@ import { CodeIcon } from 'lucide-react'
 import { SearchBar } from '@/components/page/search-bar'
 import { z } from 'zod'
 import { useSearchDialog } from '@/components/dialog/use-search-dialog'
+import { ComposerUpstreamCard } from '@/components/card/composer-upstream-card'
+import { ComposerUpstream, Source } from '@/api'
+import { useAuth } from '@/auth'
+import { COMPOSER_UPSTREAM_READ } from '@/permission'
 
 export const Route = createFileRoute('/_auth/sources')({
     validateSearch: z.object({
@@ -24,6 +28,8 @@ export const Route = createFileRoute('/_auth/sources')({
 
 function SourcesComponent() {
     const query = useSources()
+    const { can } = useAuth()
+    const composerQuery = useComposerUpstreams({ enabled: can(COMPOSER_UPSTREAM_READ) })
     const search = Route.useSearch()
     const dialogProps = useSearchDialog(search)
 
@@ -38,7 +44,10 @@ function SourcesComponent() {
     return (
         <>
             <Heading title="Sources">
-                <AddSourceDialog {...dialogProps} />
+                <div className="flex items-center gap-3">
+                    <AddSourceDialog {...dialogProps} />
+                    <AddComposerUpstreamDialog />
+                </div>
             </Heading>
             <SearchBar
                 name="sources"
@@ -48,17 +57,33 @@ function SourcesComponent() {
             <PageContent
                 sources={filteredSources}
                 query={query}
+                composerUpstreams={(composerQuery.data || []).filter(
+                    (upstream) =>
+                        upstream.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        upstream.url.toLowerCase().includes(searchTerm.toLowerCase())
+                )}
+                composerQuery={composerQuery}
             />
         </>
     )
 }
 
-function PageContent({ sources, query }: { sources: Source[]; query: ReturnType<typeof useSources> }) {
+function PageContent({
+    sources,
+    query,
+    composerUpstreams,
+    composerQuery,
+}: {
+    sources: Source[]
+    query: ReturnType<typeof useSources>
+    composerUpstreams: ComposerUpstream[]
+    composerQuery: ReturnType<typeof useComposerUpstreams>
+}) {
     const Grid = ({ children }: { children: ReactNode }) => {
         return <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">{children}</div>
     }
 
-    if (query.isLoading) {
+    if (query.isLoading || composerQuery.isLoading) {
         return (
             <Grid>
                 <LoadingSourceCard />
@@ -68,11 +93,11 @@ function PageContent({ sources, query }: { sources: Source[]; query: ReturnType<
         )
     }
 
-    if (query.isError) {
+    if (query.isError || composerQuery.isError) {
         return <FailedToLoad />
     }
 
-    if (sources.length === 0) {
+    if (sources.length === 0 && composerUpstreams.length === 0) {
         return (
             <div>
                 <Empty
@@ -101,6 +126,12 @@ function PageContent({ sources, query }: { sources: Source[]; query: ReturnType<
                 <SourceCard
                     key={source.id}
                     source={source}
+                />
+            ))}
+            {composerUpstreams.map((upstream) => (
+                <ComposerUpstreamCard
+                    key={`composer-${upstream.id}`}
+                    upstream={upstream}
                 />
             ))}
         </Grid>

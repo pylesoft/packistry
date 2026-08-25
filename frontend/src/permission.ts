@@ -18,6 +18,10 @@ export const SOURCE_CREATE = 'source_create'
 export const SOURCE_READ = 'source_read'
 export const SOURCE_UPDATE = 'source_update'
 export const SOURCE_DELETE = 'source_delete'
+export const COMPOSER_UPSTREAM_CREATE = 'composer_upstream_create'
+export const COMPOSER_UPSTREAM_READ = 'composer_upstream_read'
+export const COMPOSER_UPSTREAM_UPDATE = 'composer_upstream_update'
+export const COMPOSER_UPSTREAM_DELETE = 'composer_upstream_delete'
 export const DEPLOY_TOKEN_CREATE = 'deploy_token_create'
 export const DEPLOY_TOKEN_READ = 'deploy_token_read'
 export const DEPLOY_TOKEN_UPDATE = 'deploy_token_update'
@@ -52,6 +56,10 @@ export const permissions = [
     SOURCE_READ,
     SOURCE_UPDATE,
     SOURCE_DELETE,
+    COMPOSER_UPSTREAM_CREATE,
+    COMPOSER_UPSTREAM_READ,
+    COMPOSER_UPSTREAM_UPDATE,
+    COMPOSER_UPSTREAM_DELETE,
     DEPLOY_TOKEN_CREATE,
     DEPLOY_TOKEN_READ,
     DEPLOY_TOKEN_UPDATE,

@@ -12,6 +12,7 @@ export * from './source'
 export * from './user'
 export * from './deploy-token'
 export * from './personal-token'
+export * from './composer-upstream'
 
 export const version = z.object({
     id: z.coerce.string(),

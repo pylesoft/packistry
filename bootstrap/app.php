@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\HasValidationMessage;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -26,6 +27,12 @@ return Application::configure(basePath: dirname(__DIR__))
             });
         }
     )
+    ->withSchedule(function (Schedule $schedule): void {
+        $schedule->command('composer-upstreams:refresh')
+            ->hourly()
+            ->onOneServer()
+            ->withoutOverlapping();
+    })
     ->withMiddleware(function (Middleware $middleware): void {
         //
     })
