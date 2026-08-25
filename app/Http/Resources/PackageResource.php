@@ -22,6 +22,8 @@ class PackageResource extends JsonResource
     #[Override]
     public function toArray(Request $request): array
     {
+        $attributes = $this->resource->getAttributes();
+
         return [
             'id' => $this->id,
             'repository_id' => $this->repository_id,
@@ -34,9 +36,15 @@ class PackageResource extends JsonResource
             'repository' => new RepositoryResource($this->whenLoaded('repository')),
             'source' => new SourceResource($this->whenLoaded('source')),
             'composer_upstream' => new ComposerUpstreamResource($this->whenLoaded('composerUpstream')),
-            'upstream_checked_at' => $this->upstream_checked_at,
-            'upstream_synced_at' => $this->upstream_synced_at,
-            'upstream_last_error' => $this->upstream_last_error,
+            'upstream_checked_at' => array_key_exists('upstream_checked_at', $attributes)
+                ? $this->upstream_checked_at
+                : null,
+            'upstream_synced_at' => array_key_exists('upstream_synced_at', $attributes)
+                ? $this->upstream_synced_at
+                : null,
+            'upstream_last_error' => array_key_exists('upstream_last_error', $attributes)
+                ? $this->upstream_last_error
+                : null,
             'description' => $this->description,
             'total_downloads' => $this->total_downloads,
             'created_at' => $this->created_at,
