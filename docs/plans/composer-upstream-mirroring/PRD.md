@@ -62,7 +62,8 @@ The maximum normal discovery delay for a new vendor release is therefore about o
 - If an archive cannot be fetched during synchronization, that version is not published until a retry succeeds; previously mirrored versions remain usable.
 - A refresh validates and downloads every changed archive before publishing the new package snapshot atomically.
 - Authenticated upstreams require HTTPS. Every metadata, archive, and redirect destination is checked against private and reserved network ranges, then its validated address is pinned into the transport request while the original hostname remains authoritative for TLS.
-- Metadata responses are limited to 16 MiB and 10,000 advertised versions. Archive downloads stream one at a time to unpublished storage paths and are rejected above 256 MiB, so workers do not accumulate package ZIPs in memory.
+- Metadata requests require identity encoding so the 16 MiB limit bounds decoded memory, and package responses are limited to 10,000 advertised versions. Archive downloads stream one at a time to unpublished storage paths and are rejected above 256 MiB, so workers do not accumulate package ZIPs in memory.
+- Connection failures expose only a generic domain error so signed archive query credentials cannot reach queue logs.
 - Refresh jobs have a one-hour execution budget and a separate runtime overlap lock. Duplicate deliveries cannot run synchronization concurrently, and a terminal failure is retried by the next scheduled or manual refresh.
 - Disabling an upstream stops refresh but does not delete packages or cached archives.
 - Deletion remains a separate, explicit destructive operation.

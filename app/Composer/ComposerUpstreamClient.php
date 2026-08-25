@@ -186,7 +186,11 @@ readonly class ComposerUpstreamClient
             $limit = $sink === null ? self::MAX_METADATA_BYTES : self::MAX_ARCHIVE_BYTES;
             $options = [
                 'allow_redirects' => false,
-                'on_headers' => static function ($response) use ($limit): void {
+                'on_headers' => static function ($response) use ($limit, $sink): void {
+                    $contentEncoding = strtolower($response->getHeaderLine('Content-Encoding'));
+                    if ($sink === null && $contentEncoding !== '' && $contentEncoding !== 'identity') {
+                        throw new ComposerUpstreamException('Composer upstream returned unsupported content encoding.');
+                    }
                     if ((int) $response->getHeaderLine('Content-Length') > $limit) {
                         throw new ComposerUpstreamException('Composer upstream response exceeds the size limit.');
                     }
@@ -199,6 +203,10 @@ readonly class ComposerUpstreamClient
             ];
             if (filter_var($host, FILTER_VALIDATE_IP) === false) {
                 $options['curl'] = [CURLOPT_RESOLVE => [$this->resolveEntry($host, $port, $address)]];
+            }
+            if ($sink === null) {
+                $options['decode_content'] = false;
+                $headers['Accept-Encoding'] = 'identity';
             }
 
             $request = Http::timeout(30)
@@ -223,9 +231,9 @@ readonly class ComposerUpstreamClient
 
             try {
                 return $request->get($url);
-            } catch (ConnectionException $exception) {
+            } catch (ConnectionException) {
                 if ($index === array_key_last($addresses)) {
-                    throw $exception;
+                    throw new ComposerUpstreamException('Composer upstream connection failed.');
                 }
             }
         }

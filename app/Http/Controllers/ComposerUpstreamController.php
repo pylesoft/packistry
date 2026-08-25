@@ -14,7 +14,6 @@ use App\Jobs\RefreshComposerPackage;
 use App\Models\ComposerUpstream;
 use App\Models\Package;
 use App\Models\Repository;
-use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -106,10 +105,6 @@ readonly class ComposerUpstreamController extends Controller
                     ? 'The package could not be found upstream.'
                     : 'The Composer upstream could not provide package metadata.',
             ]);
-        } catch (ConnectionException) {
-            throw ValidationException::withMessages([
-                'upstream' => 'The Composer upstream could not be reached.',
-            ]);
         }
 
         if ($metadata['versions'] === []) {
@@ -138,6 +133,9 @@ readonly class ComposerUpstreamController extends Controller
     {
         $this->authorize(Permission::PACKAGE_UPDATE);
         $data = $request->validate(['package_id' => ['nullable', 'integer']]);
+        if (! $composerUpstream->enabled) {
+            throw ValidationException::withMessages(['upstream' => 'The Composer upstream is disabled.']);
+        }
         $packagesQuery = Package::query()
             ->userScoped()
             ->where('composer_upstream_id', $composerUpstream->id);

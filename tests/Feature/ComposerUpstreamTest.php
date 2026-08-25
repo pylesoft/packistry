@@ -140,8 +140,9 @@ it('pins the validated address while preserving the request hostname', function 
 
     expect($options[0]['curl'][CURLOPT_RESOLVE])->toBe([
         'private.example.test:443:[2001:4860:4860::8888]',
-    ]);
-    Http::assertSent(fn ($request): bool => $request->url() === 'https://private.example.test/packages.json');
+    ])->and($options[0]['decode_content'])->toBeFalse();
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://private.example.test/packages.json'
+        && $request->header('Accept-Encoding')[0] === 'identity');
 });
 
 it('retries another validated pinned address after a connection failure', function (): void {
@@ -169,6 +170,27 @@ it('retries another validated pinned address after a connection failure', functi
 
     expect($options[0]['curl'][CURLOPT_RESOLVE])->toBe(['private.example.test:443:93.184.216.34'])
         ->and($options[1]['curl'][CURLOPT_RESOLVE])->toBe(['private.example.test:443:142.250.72.14']);
+});
+
+it('does not expose signed archive URLs in terminal connection errors', function (): void {
+    $path = tempnam(sys_get_temp_dir(), 'composer-upstream-');
+    assertNotNull($path);
+    Http::fake(fn () => throw new ConnectionException('Failed https://cdn.example.test/archive.zip?token=secret'));
+    $caught = null;
+
+    try {
+        ComposerUpstream::factory()->create(['url' => 'https://private.example.test'])
+            ->client()
+            ->archive('https://cdn.example.test/archive.zip?token=secret', $path);
+    } catch (ComposerUpstreamException $exception) {
+        $caught = $exception;
+    } finally {
+        unlink($path);
+    }
+
+    expect($caught)->toBeInstanceOf(ComposerUpstreamException::class)
+        ->and($caught->getMessage())->toBe('Composer upstream connection failed.')
+        ->and($caught->getPrevious())->toBeNull();
 });
 
 it('rejects any user-info component before resolving the host', function (string $url): void {
@@ -545,6 +567,18 @@ it('returns partial results when upstream-wide refresh skips an active package',
         ->assertJsonPath('skipped_count', 1)
         ->assertJsonPath('skipped_package_ids.0', $package->id)
         ->assertJsonPath('batch_ids', []);
+});
+
+it('rejects an upstream-wide refresh when the upstream is disabled', function (): void {
+    Bus::fake();
+    user(Permission::PACKAGE_UPDATE);
+    $upstream = ComposerUpstream::factory()->create(['enabled' => false]);
+
+    postJson("/api/composer-upstreams/{$upstream->id}/refresh")
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('upstream');
+
+    Bus::assertNothingBatched();
 });
 
 it('schedules only Composer packages whose hourly refresh is due', function (): void {
