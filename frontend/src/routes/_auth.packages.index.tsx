@@ -13,6 +13,7 @@ import { PackageTable } from '@/components/table/package-table'
 import { z } from 'zod'
 import { useSearchDialog } from '@/components/dialog/use-search-dialog'
 import { navigateOnSort } from '@/components/paginated-table'
+import { EnrollComposerPackageDialog } from '@/components/dialog/enroll-composer-package-dialog'
 
 export const Route = createFileRoute('/_auth/packages/')({
     validateSearch: packageQuery.extend({
@@ -43,6 +44,7 @@ function PackagesComponent() {
             <Heading title="Packages">
                 <div className="flex items-center space-x-4">
                     <AddPackageDialog {...dialogProps} />
+                    <EnrollComposerPackageDialog />
                     <RepositoryDropdownMenu
                         selected={search.filters?.repositoryId}
                         onRepoSelect={onRepoSelected}

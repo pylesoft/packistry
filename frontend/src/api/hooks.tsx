@@ -34,6 +34,15 @@ import {
     updateSource,
     updateUser,
     UserQuery,
+    EnrollComposerPackageInput,
+    enrollComposerPackage,
+    fetchComposerUpstreams,
+    refreshComposerPackage,
+    refreshComposerUpstream,
+    storeComposerUpstream,
+    StoreComposerUpstreamInput,
+    updateComposerUpstream,
+    UpdateComposerUpstreamInput,
 } from '@/api'
 import { useAuth } from '@/auth'
 import { fetchPackageVersions, VersionQuery } from '@/api/version'
@@ -55,6 +64,7 @@ const deployTokenKey = ['deploy-tokens']
 const authenticationSourceKey = ['authentication-sources']
 const batchesKey = ['batches']
 const personalTokenKey = ['personal-tokens']
+const composerUpstreamsKey = ['composer-upstreams']
 
 export function useRepositories(query: RepositoryQuery) {
     return useQuery({
@@ -237,6 +247,109 @@ export function useSourceProjects(source?: string, search?: string) {
         queryFn: () => fetchSourceProjects(source!, search),
         queryKey: [...sourcesKey, source, 'projects', search],
         enabled: !!source && !!search && search.length >= 3,
+    })
+}
+
+export function useComposerUpstreams(options?: { enabled?: boolean }) {
+    return useQuery({
+        queryFn: fetchComposerUpstreams,
+        queryKey: composerUpstreamsKey,
+        enabled: options?.enabled ?? true,
+    })
+}
+
+export function useStoreComposerUpstream() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (input: StoreComposerUpstreamInput) => storeComposerUpstream(input),
+        onSuccess() {
+            queryClient.invalidateQueries({
+                queryKey: composerUpstreamsKey,
+                exact: false,
+            })
+        },
+    })
+}
+
+export function useUpdateComposerUpstream() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: (input: UpdateComposerUpstreamInput) => updateComposerUpstream(input),
+        onSuccess() {
+            queryClient.invalidateQueries({
+                queryKey: composerUpstreamsKey,
+                exact: false,
+            })
+            queryClient.invalidateQueries({
+                queryKey: packagesKey,
+                exact: false,
+            })
+        },
+    })
+}
+
+export function useEnrollComposerPackage() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: ({ upstreamId, ...input }: EnrollComposerPackageInput & { upstreamId: string }) =>
+            enrollComposerPackage(upstreamId, input),
+        onSuccess() {
+            queryClient.invalidateQueries({
+                queryKey: packagesKey,
+                exact: false,
+            })
+            queryClient.invalidateQueries({
+                queryKey: batchesKey,
+                exact: false,
+            })
+        },
+    })
+}
+
+export function useRefreshComposerUpstream() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: refreshComposerUpstream,
+        onSuccess() {
+            queryClient.invalidateQueries({
+                queryKey: composerUpstreamsKey,
+                exact: false,
+            })
+            queryClient.invalidateQueries({
+                queryKey: packagesKey,
+                exact: false,
+            })
+            queryClient.invalidateQueries({
+                queryKey: batchesKey,
+                exact: false,
+            })
+        },
+    })
+}
+
+export function useRefreshComposerPackage() {
+    const queryClient = useQueryClient()
+
+    return useMutation({
+        mutationFn: refreshComposerPackage,
+        onSuccess() {
+            queryClient.invalidateQueries({
+                queryKey: composerUpstreamsKey,
+                exact: false,
+            })
+            queryClient.invalidateQueries({
+                queryKey: packagesKey,
+                exact: false,
+            })
+            queryClient.invalidateQueries({
+                queryKey: batchesKey,
+                exact: false,
+            })
+        },
     })
 }
 
@@ -457,11 +570,12 @@ export function useDeleteAuthenticationSource() {
     })
 }
 
-export function useBatches({ refetchInterval }: { refetchInterval?: number }) {
+export function useBatches({ refetchInterval, enabled = true }: { refetchInterval?: number; enabled?: boolean }) {
     return useQuery({
         queryFn: fetchBatches,
         queryKey: [...batchesKey],
         refetchInterval,
+        enabled,
     })
 }
 

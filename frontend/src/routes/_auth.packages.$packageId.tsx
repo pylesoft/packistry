@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { usePackage, usePackageDownloads, usePackageVersions } from '@/api/hooks'
+import { useBatches, usePackage, usePackageDownloads, usePackageVersions } from '@/api/hooks'
 import { RepositoryCard } from '@/components/card/repository-card'
 import { SourceCard } from '@/components/card/source-card'
 import { LoadingRepositoryCard } from '@/components/card/loading-repository-card'
@@ -17,6 +17,9 @@ import { PackageIcon } from 'lucide-react'
 import { is404 } from '@/api/axios'
 import { CopyCommandTooltip } from '@/components/ui/tooltip'
 import { PackageActionsDropdownMenu } from '@/components/dropdown-menu/package-actions-dropdown-menu'
+import { ComposerUpstreamPackageCard } from '@/components/card/composer-upstream-package-card'
+import { useAuth } from '@/auth'
+import { BATCH_READ } from '@/permission'
 
 export const Route = createFileRoute('/_auth/packages/$packageId')({
     validateSearch: versionQuery,
@@ -29,9 +32,21 @@ function PackagesComponent() {
 
     const navigate = useNavigate()
     const query = usePackage(packageId)
+    const { can } = useAuth()
     const downloads = usePackageDownloads(packageId)
     const versions = usePackageVersions(packageId, search)
+    const batches = useBatches({
+        refetchInterval: query.data?.composerUpstream && can(BATCH_READ) ? 3000 : undefined,
+        enabled: !!query.data?.composerUpstream && can(BATCH_READ),
+    })
     const command = `composer require ${query.data?.name}`
+    const refreshActive = !!query.data?.composerUpstream && can(BATCH_READ) &&
+        (batches.data || []).some(
+            (batch) =>
+                batch.package?.id === query.data?.id &&
+                batch.finishedAt === null &&
+                batch.cancelledAt === null
+        )
 
     if (is404(query)) {
         return (
@@ -57,7 +72,7 @@ function PackagesComponent() {
                 </div>
             </Heading>
             <DownloadsCard data={downloads.data} />
-            <div className="flex gap-4 items-start">
+            <div className="flex flex-wrap gap-4 items-start">
                 {query.data?.repository ? (
                     <RepositoryCard
                         className="w-1/2"
@@ -72,7 +87,14 @@ function PackagesComponent() {
                         source={query.data.source}
                     />
                 ) : (
-                    query.data?.source !== null && <LoadingSourceCard className="w-1/2" />
+                    query.data?.source === undefined && <LoadingSourceCard className="w-1/2" />
+                )}
+                {query.data?.composerUpstream && (
+                    <ComposerUpstreamPackageCard
+                        upstream={query.data.composerUpstream}
+                        packageId={query.data.id}
+                        refreshActive={refreshActive}
+                    />
                 )}
             </div>
             <SearchBar
