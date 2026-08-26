@@ -87,23 +87,17 @@ class Source extends Model
 
     public function composerToken(): ?string
     {
-        $token = filled($this->token) ? decrypt($this->token) : null;
-
-        return filled($token) ? $token : null;
+        return $this->composerCredential($this->token);
     }
 
     public function composerUsername(): ?string
     {
-        $username = filled($this->username) ? decrypt($this->username) : null;
-
-        return filled($username) ? $username : null;
+        return $this->composerCredential($this->username);
     }
 
     public function composerPassword(): ?string
     {
-        $password = filled($this->password) ? decrypt($this->password) : null;
-
-        return filled($password) ? $password : null;
+        return $this->composerCredential($this->password);
     }
 
     public function hasCredentials(): bool
@@ -121,5 +115,20 @@ class Source extends Model
     public function packages(): HasMany
     {
         return $this->hasMany(Package::class);
+    }
+
+    private function composerCredential(?string $encrypted): ?string
+    {
+        if (blank($encrypted)) {
+            return null;
+        }
+
+        $decrypted = decrypt($encrypted, false);
+        $serialized = @unserialize($decrypted, ['allowed_classes' => false]);
+        $credential = is_string($serialized) && serialize($serialized) === $decrypted
+            ? $serialized
+            : $decrypted;
+
+        return filled($credential) ? $credential : null;
     }
 }

@@ -16,6 +16,7 @@ use App\Models\Version;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
@@ -317,6 +318,28 @@ it('treats encrypted empty composer credentials as missing', function (ComposerS
     ComposerSourceAuthType::BASIC,
     ComposerSourceAuthType::BEARER,
 ]);
+
+it('reads composer credentials migrated from encrypted model casts', function (): void {
+    $source = Source::factory()->composer()->create([
+        'auth_type' => ComposerSourceAuthType::BASIC,
+        'username' => Crypt::encryptString('account@example.test'),
+        'password' => Crypt::encryptString('license-secret'),
+    ]);
+
+    expect($source->composerUsername())->toBe('account@example.test')
+        ->and($source->composerPassword())->toBe('license-secret')
+        ->and($source->hasCredentials())->toBeTrue();
+
+    $source->forceFill([
+        'auth_type' => ComposerSourceAuthType::BEARER,
+        'username' => null,
+        'password' => null,
+        'token' => Crypt::encryptString('api-token'),
+    ])->save();
+
+    expect($source->composerToken())->toBe('api-token')
+        ->and($source->hasCredentials())->toBeTrue();
+});
 
 it('does not forward upstream authorization across an origin redirect', function (): void {
     $upstream = Source::factory()->composer()->basic()->create(['url' => 'https://private.example.test']);
