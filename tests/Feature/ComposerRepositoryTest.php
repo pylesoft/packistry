@@ -5,9 +5,9 @@ declare(strict_types=1);
 use App\Composer\OutboundUrlGuard;
 use App\Composer\SynchronizeComposerPackage;
 use App\CreateFromZip;
-use App\Enums\ComposerUpstreamAuthType;
+use App\Enums\ComposerSourceAuthType;
 use App\Enums\Permission;
-use App\Exceptions\ComposerUpstreamException;
+use App\Exceptions\ComposerRepositoryException;
 use App\Jobs\RefreshComposerPackage;
 use App\Models\Package;
 use App\Models\Repository;
@@ -16,6 +16,7 @@ use App\Models\Version;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
@@ -31,7 +32,7 @@ beforeEach(function (): void {
     ));
 });
 
-function composerUpstreamArchive(string $name, string $version): string
+function composerPackageArchive(string $name, string $version): string
 {
     $path = tempnam(sys_get_temp_dir(), 'composer-upstream-');
     assertNotNull($path);
@@ -94,6 +95,20 @@ it('requires HTTPS for authenticated upstreams', function (): void {
     Http::assertNothingSent();
 });
 
+it('treats a missing authentication type as unauthenticated', function (): void {
+    Http::fake([
+        'http://packages.example.test/packages.json' => Http::response(['packages' => []]),
+    ]);
+
+    Source::factory()->composer()->create([
+        'url' => 'http://packages.example.test',
+        'auth_type' => null,
+    ])->composerClient()->validate();
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'http://packages.example.test/packages.json'
+        && ! $request->hasHeader('Authorization'));
+});
+
 it('rejects private literal upstream targets', function (): void {
     user(Permission::SOURCE_CREATE);
     Http::fake();
@@ -112,14 +127,14 @@ it('rejects hostnames that resolve to private addresses', function (): void {
     $guard = new OutboundUrlGuard(fn (string $host): array => ['10.0.0.5']);
 
     expect(fn () => $guard->ensureSafe('https://packages.example.test'))
-        ->toThrow(ComposerUpstreamException::class);
+        ->toThrow(ComposerRepositoryException::class);
 });
 
 it('rejects IPv4-mapped private IPv6 targets', function (): void {
     $guard = new OutboundUrlGuard(fn (string $host): array => ['::ffff:127.0.0.1']);
 
     expect(fn () => $guard->ensureSafe('https://packages.example.test'))
-        ->toThrow(ComposerUpstreamException::class);
+        ->toThrow(ComposerRepositoryException::class);
 });
 
 it('pins the validated address while preserving the request hostname', function (): void {
@@ -184,13 +199,13 @@ it('does not expose signed archive URLs in terminal connection errors', function
         Source::factory()->composer()->create(['url' => 'https://private.example.test'])
             ->composerClient()
             ->archive('https://cdn.example.test/archive.zip?token=secret', $path);
-    } catch (ComposerUpstreamException $exception) {
+    } catch (ComposerRepositoryException $exception) {
         $caught = $exception;
     } finally {
         unlink($path);
     }
 
-    expect($caught)->toBeInstanceOf(ComposerUpstreamException::class)
+    expect($caught)->toBeInstanceOf(ComposerRepositoryException::class)
         ->and($caught->getMessage())->toBe('Composer upstream connection failed.')
         ->and($caught->getPrevious())->toBeNull();
 });
@@ -199,7 +214,7 @@ it('rejects any user-info component before resolving the host', function (string
     $guard = new OutboundUrlGuard(fn (string $host): array => ['93.184.216.34']);
 
     expect(fn () => $guard->ensureSafe($url))
-        ->toThrow(ComposerUpstreamException::class);
+        ->toThrow(ComposerRepositoryException::class);
 })->with([
     'empty username' => 'https://@packages.example.test',
     'password' => 'https://:secret@packages.example.test',
@@ -279,11 +294,11 @@ it('synchronizes archives and publishes only Packistry distribution URLs', funct
     Storage::disk()->assertExists($version->archive_path);
 });
 
-it('sends only the configured authentication header', function (ComposerUpstreamAuthType $authType, ?string $header): void {
+it('sends only the configured authentication header', function (ComposerSourceAuthType $authType, ?string $header): void {
     $upstream = Source::factory()->composer()
         ->state(['url' => 'https://private.example.test'])
-        ->when($authType === ComposerUpstreamAuthType::BASIC, fn ($factory) => $factory->basic('buyer@example.test', 'license'))
-        ->when($authType === ComposerUpstreamAuthType::BEARER, fn ($factory) => $factory->bearer('token'))
+        ->when($authType === ComposerSourceAuthType::BASIC, fn ($factory) => $factory->basic('buyer@example.test', 'license'))
+        ->when($authType === ComposerSourceAuthType::BEARER, fn ($factory) => $factory->bearer('token'))
         ->create(['auth_type' => $authType]);
 
     Http::fake(['https://private.example.test/packages.json' => Http::response(['packages' => []])]);
@@ -296,13 +311,16 @@ it('sends only the configured authentication header', function (ComposerUpstream
             : $request->header('Authorization')[0] === $header;
     });
 })->with([
-    'none' => [ComposerUpstreamAuthType::NONE, null],
-    'basic' => [ComposerUpstreamAuthType::BASIC, 'Basic '.base64_encode('buyer@example.test:license')],
-    'bearer' => [ComposerUpstreamAuthType::BEARER, 'Bearer token'],
+    'none' => [ComposerSourceAuthType::NONE, null],
+    'basic' => [ComposerSourceAuthType::BASIC, 'Basic '.base64_encode('buyer@example.test:license')],
+    'bearer' => [ComposerSourceAuthType::BEARER, 'Bearer token'],
 ]);
 
-it('treats encrypted empty composer credentials as missing', function (ComposerUpstreamAuthType $authType): void {
+it('treats encrypted empty composer credentials as missing', function (ComposerSourceAuthType $authType): void {
+    Http::fake(['https://private.example.test/packages.json' => Http::response(['packages' => []])]);
+
     $source = Source::factory()->composer()->create([
+        'url' => 'https://private.example.test',
         'auth_type' => $authType,
         'token' => encrypt(''),
         'username' => encrypt(''),
@@ -313,10 +331,36 @@ it('treats encrypted empty composer credentials as missing', function (ComposerU
         ->and($source->composerUsername())->toBeNull()
         ->and($source->composerPassword())->toBeNull()
         ->and($source->hasCredentials())->toBeFalse();
+
+    $source->composerClient()->validate();
+
+    Http::assertSent(fn ($request): bool => ! $request->hasHeader('Authorization'));
 })->with([
-    ComposerUpstreamAuthType::BASIC,
-    ComposerUpstreamAuthType::BEARER,
+    ComposerSourceAuthType::BASIC,
+    ComposerSourceAuthType::BEARER,
 ]);
+
+it('reads composer credentials migrated from encrypted model casts', function (): void {
+    $source = Source::factory()->composer()->create([
+        'auth_type' => ComposerSourceAuthType::BASIC,
+        'username' => Crypt::encryptString('account@example.test'),
+        'password' => Crypt::encryptString('license-secret'),
+    ]);
+
+    expect($source->composerUsername())->toBe('account@example.test')
+        ->and($source->composerPassword())->toBe('license-secret')
+        ->and($source->hasCredentials())->toBeTrue();
+
+    $source->forceFill([
+        'auth_type' => ComposerSourceAuthType::BEARER,
+        'username' => null,
+        'password' => null,
+        'token' => Crypt::encryptString('api-token'),
+    ])->save();
+
+    expect($source->composerToken())->toBe('api-token')
+        ->and($source->hasCredentials())->toBeTrue();
+});
 
 it('does not forward upstream authorization across an origin redirect', function (): void {
     $upstream = Source::factory()->composer()->basic()->create(['url' => 'https://private.example.test']);
@@ -381,7 +425,7 @@ it('rejects an unsafe redirect before requesting it', function (): void {
         'https://private.example.test/packages.json' => Http::response('', 302, ['Location' => 'http://127.0.0.1/internal']),
     ]);
 
-    expect(fn () => $upstream->composerClient()->validate())->toThrow(ComposerUpstreamException::class);
+    expect(fn () => $upstream->composerClient()->validate())->toThrow(ComposerRepositoryException::class);
 
     Http::assertSentCount(1);
 });
@@ -392,7 +436,7 @@ it('rejects an authenticated upstream redirect to HTTP', function (): void {
         'https://private.example.test/packages.json' => Http::response('', 302, ['Location' => 'http://cdn.example.test/packages.json']),
     ]);
 
-    expect(fn () => $upstream->composerClient()->validate())->toThrow(ComposerUpstreamException::class);
+    expect(fn () => $upstream->composerClient()->validate())->toThrow(ComposerRepositoryException::class);
 
     Http::assertSentCount(1);
 });
@@ -586,7 +630,7 @@ it('retains the refresh lock across retryable failures until terminal failure', 
         'https://private.example.test/p2/test/test.json' => Http::response([], 503),
     ]);
 
-    expect(fn () => $job->handle(app(SynchronizeComposerPackage::class)))->toThrow(ComposerUpstreamException::class)
+    expect(fn () => $job->handle(app(SynchronizeComposerPackage::class)))->toThrow(ComposerRepositoryException::class)
         ->and(Cache::lock('composer-package-refresh:'.$package->id, 7200)->get())->toBeFalse();
 
     $job->failed(null);
@@ -623,7 +667,7 @@ it('schedules only Composer packages whose hourly refresh is due', function (): 
         'upstream_checked_at' => now(),
     ]);
 
-    artisan('composer-upstreams:refresh')->assertExitCode(0);
+    artisan('composer-packages:refresh')->assertExitCode(0);
 
     Bus::assertBatchCount(1);
     $job = null;
@@ -758,7 +802,7 @@ it('rejects non-HTTP archive distributions', function (): void {
     ]);
 
     expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['source'])))
-        ->toThrow(ComposerUpstreamException::class);
+        ->toThrow(ComposerRepositoryException::class);
 
     expect($package->versions()->count())->toBe(0);
     Http::assertSentCount(1);
@@ -784,7 +828,7 @@ it('rejects oversized archives before publishing a version', function (): void {
     ]);
 
     expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['source'])))
-        ->toThrow(ComposerUpstreamException::class);
+        ->toThrow(ComposerRepositoryException::class);
 
     expect($package->versions()->count())->toBe(0);
 });
@@ -797,7 +841,7 @@ it('rejects oversized metadata responses', function (): void {
         ]),
     ]);
 
-    expect(fn () => $upstream->composerClient()->validate())->toThrow(ComposerUpstreamException::class);
+    expect(fn () => $upstream->composerClient()->validate())->toThrow(ComposerRepositoryException::class);
 });
 
 it('rejects pathological package version counts', function (): void {
@@ -811,7 +855,7 @@ it('rejects pathological package version counts', function (): void {
     ]);
 
     expect(fn () => $upstream->composerClient()->package('test/test'))
-        ->toThrow(ComposerUpstreamException::class);
+        ->toThrow(ComposerRepositoryException::class);
 });
 
 it('publishes no metadata when a later archive fails preflight validation', function (): void {
@@ -822,7 +866,7 @@ it('publishes no metadata when a later archive fails preflight validation', func
         'description' => 'last public snapshot',
         'source_id' => $upstream->id,
     ]);
-    $firstArchive = composerUpstreamArchive('test/test', '1.0.0');
+    $firstArchive = composerPackageArchive('test/test', '1.0.0');
 
     Http::fake([
         'https://private.example.test/p2/test/test.json' => Http::response([
@@ -851,7 +895,7 @@ it('publishes no metadata when a later archive fails preflight validation', func
     ]);
 
     expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['source'])))
-        ->toThrow(ComposerUpstreamException::class);
+        ->toThrow(ComposerRepositoryException::class);
 
     expect($package->fresh())
         ->description->toBe('last public snapshot')
@@ -870,8 +914,8 @@ it('rolls back publication and deletes only staged archives when database public
         'source_id' => $upstream->id,
     ]);
     $archives = [
-        '1.0.0' => composerUpstreamArchive('test/test', '1.0.0'),
-        '2.0.0' => composerUpstreamArchive('test/test', '2.0.0'),
+        '1.0.0' => composerPackageArchive('test/test', '1.0.0'),
+        '2.0.0' => composerPackageArchive('test/test', '2.0.0'),
     ];
     Http::fake(function ($request) use ($archives): mixed {
         if ($request->url() === 'https://private.example.test/p2/test/test.json') {
@@ -937,7 +981,7 @@ it('keeps the last snapshot and records package health on refresh failure', func
     ]);
 
     expect(fn () => (new RefreshComposerPackage($package->id))->handle(app(SynchronizeComposerPackage::class)))
-        ->toThrow(ComposerUpstreamException::class);
+        ->toThrow(ComposerRepositoryException::class);
 
     expect($package->fresh()->upstream_last_error)->toBe('Composer upstream synchronization failed.')
         ->and($package->fresh()->upstream_checked_at)->not->toBeNull()
@@ -954,8 +998,8 @@ it('enrolls Flux and Scramble-shaped provider packages through a real synchroniz
     ]);
     [$vendor, $package] = explode('/', $name, 2);
     $archives = [
-        '1.0.0' => composerUpstreamArchive($name, '1.0.0'),
-        '1.1.0' => composerUpstreamArchive($name, '1.1.0'),
+        '1.0.0' => composerPackageArchive($name, '1.0.0'),
+        '1.1.0' => composerPackageArchive($name, '1.1.0'),
     ];
 
     Http::fake(function ($request) use ($name, $vendor, $package, $archives): mixed {
@@ -1082,7 +1126,7 @@ it('rejects an empty upstream snapshot without hiding mirrored versions', functi
     $versions = [];
 
     expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['source'])))
-        ->toThrow(ComposerUpstreamException::class, 'Composer upstream returned invalid package metadata.');
+        ->toThrow(ComposerRepositoryException::class, 'Composer upstream returned invalid package metadata.');
 
     expect($package->versions()->firstOrFail()->upstream_removed_at)->toBeNull()
         ->and($package->fresh()->latest_version)->toBe('1.0.0');

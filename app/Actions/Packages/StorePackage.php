@@ -9,7 +9,7 @@ use App\Enums\PackageType;
 use App\Enums\SourceProvider;
 use App\Exceptions\ArchiveInvalidContentTypeException;
 use App\Exceptions\ComposerJsonNotFoundException;
-use App\Exceptions\ComposerUpstreamException;
+use App\Exceptions\ComposerRepositoryException;
 use App\Exceptions\FailedToFetchArchiveException;
 use App\Exceptions\FailedToOpenArchiveException;
 use App\Exceptions\NameNotFoundException;
@@ -119,7 +119,7 @@ class StorePackage
 
         try {
             $metadata = $source->composerClient()->package($input->name);
-        } catch (ComposerUpstreamException $exception) {
+        } catch (ComposerRepositoryException $exception) {
             $notFound = $exception->getMessage() === 'Package was not found upstream.';
 
             throw ValidationException::withMessages([

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Actions\Sources;
 
 use App\Actions\Sources\Inputs\UpdateSourceInput;
-use App\Enums\ComposerUpstreamAuthType;
+use App\Enums\ComposerSourceAuthType;
 use App\Enums\SourceProvider;
 use App\Exceptions\FailedToParseUrlException;
 use App\Exceptions\InvalidTokenException;
@@ -69,11 +69,11 @@ class UpdateSource
             ? $source->composerToken()
             : $input->token;
 
-        if ($authType === ComposerUpstreamAuthType::BASIC && (blank($username) || blank($password))) {
+        if ($authType === ComposerSourceAuthType::BASIC && (blank($username) || blank($password))) {
             throw ValidationException::withMessages(['password' => 'Basic authentication requires a username and password.']);
         }
 
-        if ($authType === ComposerUpstreamAuthType::BEARER && blank($token)) {
+        if ($authType === ComposerSourceAuthType::BEARER && blank($token)) {
             throw ValidationException::withMessages(['token' => 'Bearer authentication requires a token.']);
         }
 
@@ -82,9 +82,9 @@ class UpdateSource
             'url' => $input->url instanceof Optional ? $source->url : $this->composerUrl($input->url),
             'metadata' => is_array($input->metadata) ? [...$source->metadata, ...$input->metadata] : $source->metadata,
             'auth_type' => $authType,
-            'username' => $authType === ComposerUpstreamAuthType::BASIC ? encrypt($username) : null,
-            'password' => $authType === ComposerUpstreamAuthType::BASIC ? encrypt($password) : null,
-            'token' => encrypt($authType === ComposerUpstreamAuthType::BEARER ? $token : ''),
+            'username' => $authType === ComposerSourceAuthType::BASIC ? encrypt($username) : null,
+            'password' => $authType === ComposerSourceAuthType::BASIC ? encrypt($password) : null,
+            'token' => encrypt($authType === ComposerSourceAuthType::BEARER ? $token : ''),
             'enabled' => $input->enabled instanceof Optional ? $source->enabled : $input->enabled,
         ]);
 

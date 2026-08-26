@@ -6,4 +6,4 @@ namespace App\Exceptions;
 
 use RuntimeException;
 
-class ComposerUpstreamException extends RuntimeException {}
+class ComposerRepositoryException extends RuntimeException {}

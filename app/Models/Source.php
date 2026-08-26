@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
-use App\Composer\ComposerUpstreamClient;
-use App\Enums\ComposerUpstreamAuthType;
+use App\Composer\ComposerRepositoryClient;
+use App\Enums\ComposerSourceAuthType;
 use App\Enums\SourceProvider;
 use App\Sources\Client;
 use Database\Factories\SourceFactory;
@@ -25,7 +25,7 @@ use RuntimeException;
  * @property string $url
  * @property string $token
  * @property string $secret
- * @property ComposerUpstreamAuthType|null $auth_type
+ * @property ComposerSourceAuthType|null $auth_type
  * @property string|null $username
  * @property string|null $password
  * @property bool $enabled
@@ -58,7 +58,7 @@ class Source extends Model
     protected $casts = [
         'provider' => SourceProvider::class,
         'metadata' => 'array',
-        'auth_type' => ComposerUpstreamAuthType::class,
+        'auth_type' => ComposerSourceAuthType::class,
         'enabled' => 'bool',
         'last_checked_at' => 'datetime',
     ];
@@ -76,42 +76,36 @@ class Source extends Model
         );
     }
 
-    public function composerClient(): ComposerUpstreamClient
+    public function composerClient(): ComposerRepositoryClient
     {
         if ($this->provider !== SourceProvider::COMPOSER) {
             throw new RuntimeException("Source {$this->id} is not a Composer repository.");
         }
 
-        return new ComposerUpstreamClient($this);
+        return new ComposerRepositoryClient($this);
     }
 
     public function composerToken(): ?string
     {
-        $token = filled($this->token) ? decrypt($this->token) : null;
-
-        return filled($token) ? $token : null;
+        return $this->composerCredential($this->token);
     }
 
     public function composerUsername(): ?string
     {
-        $username = filled($this->username) ? decrypt($this->username) : null;
-
-        return filled($username) ? $username : null;
+        return $this->composerCredential($this->username);
     }
 
     public function composerPassword(): ?string
     {
-        $password = filled($this->password) ? decrypt($this->password) : null;
-
-        return filled($password) ? $password : null;
+        return $this->composerCredential($this->password);
     }
 
     public function hasCredentials(): bool
     {
         return match ($this->auth_type) {
-            ComposerUpstreamAuthType::NONE, null => false,
-            ComposerUpstreamAuthType::BASIC => filled($this->composerUsername()) && filled($this->composerPassword()),
-            ComposerUpstreamAuthType::BEARER => filled($this->composerToken()),
+            ComposerSourceAuthType::NONE, null => false,
+            ComposerSourceAuthType::BASIC => filled($this->composerUsername()) && filled($this->composerPassword()),
+            ComposerSourceAuthType::BEARER => filled($this->composerToken()),
         };
     }
 
@@ -121,5 +115,20 @@ class Source extends Model
     public function packages(): HasMany
     {
         return $this->hasMany(Package::class);
+    }
+
+    private function composerCredential(?string $encrypted): ?string
+    {
+        if (blank($encrypted)) {
+            return null;
+        }
+
+        $decrypted = decrypt($encrypted, false);
+        $serialized = @unserialize($decrypted, ['allowed_classes' => false]);
+        $credential = is_string($serialized) && serialize($serialized) === $decrypted
+            ? $serialized
+            : $decrypted;
+
+        return filled($credential) ? $credential : null;
     }
 }

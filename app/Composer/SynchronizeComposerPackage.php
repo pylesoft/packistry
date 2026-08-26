@@ -6,7 +6,7 @@ namespace App\Composer;
 
 use App\CreateFromZip;
 use App\Enums\SourceProvider;
-use App\Exceptions\ComposerUpstreamException;
+use App\Exceptions\ComposerRepositoryException;
 use App\Models\Package;
 use App\Normalizer;
 use Illuminate\Support\Facades\DB;
@@ -20,13 +20,13 @@ readonly class SynchronizeComposerPackage
     /** @param array<string, mixed>|null $discoveredMetadata */
     public function handle(Package $package, ?array $discoveredMetadata = null): void
     {
-        $upstream = $package->source;
-        if ($upstream === null || $upstream->provider !== SourceProvider::COMPOSER || ! $upstream->enabled) {
+        $source = $package->source;
+        if ($source === null || $source->provider !== SourceProvider::COMPOSER || ! $source->enabled) {
             return;
         }
 
         $package->loadMissing(['repository', 'versions']);
-        $client = $upstream->composerClient();
+        $client = $source->composerClient();
         $metadata = $discoveredMetadata ?? $client->package($package->name, $package->upstream_etag, $package->upstream_last_modified);
         if (($metadata['not_modified'] ?? false) === true) {
             DB::transaction(function () use ($package): void {
@@ -42,7 +42,7 @@ readonly class SynchronizeComposerPackage
 
         $versions = $metadata['versions'] ?? null;
         if (! is_array($versions) || $versions === []) {
-            throw new ComposerUpstreamException('Composer upstream returned invalid package metadata.');
+            throw new ComposerRepositoryException('Composer upstream returned invalid package metadata.');
         }
 
         $firstVersion = null;
@@ -63,7 +63,7 @@ readonly class SynchronizeComposerPackage
         try {
             foreach ($versions as $versionData) {
                 if (! is_array($versionData)) {
-                    throw new ComposerUpstreamException('Composer package metadata contains an invalid version.');
+                    throw new ComposerRepositoryException('Composer package metadata contains an invalid version.');
                 }
                 $versionName = (string) ($versionData['version'] ?? '');
                 $dist = $versionData['dist'] ?? null;
@@ -76,7 +76,7 @@ readonly class SynchronizeComposerPackage
                     || ! is_string($dist['url'])
                     || filter_var($dist['url'], FILTER_VALIDATE_URL) === false
                 ) {
-                    throw new ComposerUpstreamException('Composer package metadata contains an invalid distribution.');
+                    throw new ComposerRepositoryException('Composer package metadata contains an invalid distribution.');
                 }
 
                 $normalized = Normalizer::version($versionName);
@@ -111,17 +111,17 @@ readonly class SynchronizeComposerPackage
                     try {
                         $response = $client->archive($dist['url'], $path);
                         if ($response->failed()) {
-                            throw new ComposerUpstreamException('Composer package archive download failed.');
+                            throw new ComposerRepositoryException('Composer package archive download failed.');
                         }
 
                         $actualHash = hash_file('sha1', $path);
                         if ($actualHash === false || ($expectedHash !== null && strtolower($actualHash) !== $expectedHash)) {
-                            throw new ComposerUpstreamException('Composer package archive checksum mismatch.');
+                            throw new ComposerRepositoryException('Composer package archive checksum mismatch.');
                         }
 
                         $archiveMetadata = $this->createFromZip->metadata($path);
                         if (($archiveMetadata['name'] ?? null) !== $package->name) {
-                            throw new ComposerUpstreamException('Composer package archive identity mismatch.');
+                            throw new ComposerRepositoryException('Composer package archive identity mismatch.');
                         }
                         $existingArchive = $existing?->archives()
                             ->where('shasum', $actualHash)

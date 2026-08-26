@@ -6,12 +6,15 @@ use App\Enums\SourceProvider;
 use App\Models\Package;
 use App\Models\Repository;
 use App\Models\Source;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 it('backfills deployed Composer upstreams into sources without reusing ids', function (): void {
-    $migration = require database_path('migrations/2026_08_25_130000_unify_composer_upstreams_with_sources.php');
-    $migration->down();
+    $unification = require database_path('migrations/2026_08_25_130000_unify_composer_upstreams_with_sources.php');
+    $cleanup = require database_path('migrations/2026_08_25_140000_remove_legacy_composer_upstream_schema.php');
+    $cleanup->down();
+    $unification->down();
 
     Source::factory()->create();
     $url = 'https://private.example.test/'.str_repeat('long-path/', 32);
@@ -33,7 +36,7 @@ it('backfills deployed Composer upstreams into sources without reusing ids', fun
         'composer_upstream_id' => $legacyId,
     ]);
 
-    $migration->up();
+    $unification->up();
 
     $source = Source::query()
         ->where('legacy_composer_upstream_id', $legacyId)
@@ -50,4 +53,82 @@ it('backfills deployed Composer upstreams into sources without reusing ids', fun
         ->and($package->fresh()->composer_upstream_id)->toBe($legacyId)
         ->and($indexes)->toContain('sources_provider_index')
         ->not->toContain('sources_provider_url_index');
+
+    $cleanup->up();
+
+    expect(Schema::hasTable('composer_upstreams'))->toBeFalse()
+        ->and(Schema::hasColumn('sources', 'legacy_composer_upstream_id'))->toBeFalse()
+        ->and(Schema::hasColumn('packages', 'composer_upstream_id'))->toBeFalse()
+        ->and($package->fresh()->source_id)->toBe($source->id);
+});
+
+it('reconstructs legacy Composer data when the cleanup migration is rolled back', function (): void {
+    $migration = require database_path('migrations/2026_08_25_140000_remove_legacy_composer_upstream_schema.php');
+    $repository = Repository::factory()->create();
+    $sources = collect([
+        Source::factory()->composer()->create(),
+        Source::factory()->composer()->basic('buyer@example.test', 'license-secret')->create(),
+        Source::factory()->composer()->bearer('api-token')->create(),
+    ]);
+    $packages = $sources->map(fn (Source $source): Package => Package::factory()
+        ->for($repository)
+        ->for($source)
+        ->create(['name' => "vendor/package-{$source->id}"]));
+
+    $migration->down();
+
+    foreach ($sources as $index => $source) {
+        $legacyId = $source->fresh()->legacy_composer_upstream_id;
+        $legacy = DB::table('composer_upstreams')->find($legacyId);
+
+        expect($legacy)->not->toBeNull()
+            ->and($legacy->name)->toBe($source->name)
+            ->and($legacy->url)->toBe($source->url)
+            ->and($packages[$index]->fresh()->composer_upstream_id)->toBe($legacyId);
+
+        match ($source->auth_type->value) {
+            'none' => expect($legacy->username)->toBeNull()
+                ->and($legacy->password)->toBeNull()
+                ->and($legacy->token)->toBeNull(),
+            'basic' => expect(Crypt::decryptString($legacy->username))->toBe('buyer@example.test')
+                ->and(Crypt::decryptString($legacy->password))->toBe('license-secret')
+                ->and($legacy->token)->toBeNull(),
+            'bearer' => expect($legacy->username)->toBeNull()
+                ->and($legacy->password)->toBeNull()
+                ->and(Crypt::decryptString($legacy->token))->toBe('api-token'),
+        };
+    }
+
+    $migration->up();
+});
+
+it('refuses to remove legacy schema when source or package mappings are inconsistent', function (): void {
+    $migration = require database_path('migrations/2026_08_25_140000_remove_legacy_composer_upstream_schema.php');
+    $repository = Repository::factory()->create();
+    $source = Source::factory()->composer()->create();
+    $otherSource = Source::factory()->composer()->create();
+    $package = Package::factory()->for($repository)->for($source)->create();
+    $migration->down();
+
+    DB::table('sources')->where('id', $source->id)->update(['provider' => 'github']);
+
+    expect(fn () => $migration->up())
+        ->toThrow(RuntimeException::class, 'mapped to a non-Composer source');
+
+    DB::table('sources')->where('id', $source->id)->update(['provider' => 'composer']);
+    DB::table('packages')->where('id', $package->id)->update([
+        'composer_upstream_id' => $otherSource->fresh()->legacy_composer_upstream_id,
+    ]);
+
+    expect(fn () => $migration->up())
+        ->toThrow(RuntimeException::class, 'package mapping is inconsistent');
+
+    expect(Schema::hasTable('composer_upstreams'))->toBeTrue()
+        ->and(Schema::hasColumn('sources', 'legacy_composer_upstream_id'))->toBeTrue()
+        ->and(Schema::hasColumn('packages', 'composer_upstream_id'))->toBeTrue();
+
+    DB::table('packages')->where('id', $package->id)->update([
+        'composer_upstream_id' => $source->fresh()->legacy_composer_upstream_id,
+    ]);
+    $migration->up();
 });

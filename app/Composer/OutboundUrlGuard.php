@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Composer;
 
-use App\Exceptions\ComposerUpstreamException;
+use App\Exceptions\ComposerRepositoryException;
 use Closure;
 
 readonly class OutboundUrlGuard
@@ -23,33 +23,33 @@ readonly class OutboundUrlGuard
     {
         $parts = parse_url($url);
         if (! is_array($parts) || ! isset($parts['scheme'], $parts['host'])) {
-            throw new ComposerUpstreamException('Composer upstream URL is invalid.');
+            throw new ComposerRepositoryException('Composer upstream URL is invalid.');
         }
 
         $scheme = strtolower($parts['scheme']);
         if (! in_array($scheme, ['http', 'https'], true)
             || array_intersect(['user', 'pass'], array_keys($parts)) !== []) {
-            throw new ComposerUpstreamException('Composer upstream URL is unsafe.');
+            throw new ComposerRepositoryException('Composer upstream URL is unsafe.');
         }
         if ($requireHttps && $scheme !== 'https') {
-            throw new ComposerUpstreamException('Authenticated Composer upstreams require HTTPS.');
+            throw new ComposerRepositoryException('Authenticated Composer upstreams require HTTPS.');
         }
 
         $host = strtolower(trim($parts['host'], '[]'));
         if ($host === '' || $host === 'localhost' || str_ends_with($host, '.localhost')) {
-            throw new ComposerUpstreamException('Composer upstream URL is unsafe.');
+            throw new ComposerRepositoryException('Composer upstream URL is unsafe.');
         }
 
         $addresses = filter_var($host, FILTER_VALIDATE_IP) !== false
             ? [$host]
             : ($this->resolve)($host);
         if ($addresses === []) {
-            throw new ComposerUpstreamException('Composer upstream host could not be resolved safely.');
+            throw new ComposerRepositoryException('Composer upstream host could not be resolved safely.');
         }
 
         foreach ($addresses as $address) {
             if (! $this->isPublicAddress($address)) {
-                throw new ComposerUpstreamException('Composer upstream URL resolves to an unsafe address.');
+                throw new ComposerRepositoryException('Composer upstream URL resolves to an unsafe address.');
             }
         }
 

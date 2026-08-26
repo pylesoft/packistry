@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Factories;
 
-use App\Enums\ComposerUpstreamAuthType;
+use App\Enums\ComposerSourceAuthType;
 use App\Enums\SourceProvider;
 use App\Models\Source;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -51,7 +51,7 @@ class SourceFactory extends Factory
     {
         return $this->provider(SourceProvider::COMPOSER)->state([
             'token' => encrypt(''),
-            'auth_type' => ComposerUpstreamAuthType::NONE,
+            'auth_type' => ComposerSourceAuthType::NONE,
             'enabled' => true,
             'last_checked_at' => now(),
         ]);
@@ -63,7 +63,7 @@ class SourceFactory extends Factory
             'provider' => SourceProvider::COMPOSER,
             'token' => encrypt(''),
             'secret' => encrypt('secret'),
-            'auth_type' => ComposerUpstreamAuthType::BASIC,
+            'auth_type' => ComposerSourceAuthType::BASIC,
             'username' => encrypt($username),
             'password' => encrypt($password),
             'enabled' => true,
@@ -75,7 +75,7 @@ class SourceFactory extends Factory
         return $this->state([
             'provider' => SourceProvider::COMPOSER,
             'secret' => encrypt('secret'),
-            'auth_type' => ComposerUpstreamAuthType::BEARER,
+            'auth_type' => ComposerSourceAuthType::BEARER,
             'token' => encrypt($token),
             'enabled' => true,
         ]);
