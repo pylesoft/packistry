@@ -101,8 +101,21 @@ return new class extends Migration
             throw new RuntimeException('Cannot remove legacy Composer schema until every upstream is mapped to one source.');
         }
 
+        $packageMappings = DB::table('packages')
+            ->whereNotNull('composer_upstream_id')
+            ->get(['source_id', 'composer_upstream_id']);
+
+        $packageSourceIds = $packageMappings
+            ->pluck('source_id')
+            ->filter()
+            ->unique();
+
         $sources = DB::table('sources')
             ->select(['id', 'provider', 'legacy_composer_upstream_id'])
+            ->where(function ($query) use ($packageSourceIds): void {
+                $query->whereNotNull('legacy_composer_upstream_id')
+                    ->when($packageSourceIds->isNotEmpty(), fn ($query) => $query->orWhereIn('id', $packageSourceIds));
+            })
             ->get()
             ->keyBy('id');
 
@@ -111,7 +124,7 @@ return new class extends Migration
             throw new RuntimeException('Cannot remove legacy Composer schema while an upstream is mapped to a non-Composer source.');
         }
 
-        foreach (DB::table('packages')->whereNotNull('composer_upstream_id')->get(['source_id', 'composer_upstream_id']) as $package) {
+        foreach ($packageMappings as $package) {
             $source = $sources->get($package->source_id);
 
             if ($source === null
