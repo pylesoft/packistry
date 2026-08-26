@@ -219,14 +219,20 @@ readonly class ComposerRepositoryClient
             }
 
             if ($this->sameOrigin($url, $this->source->url)) {
-                $request = match ($this->source->auth_type) {
-                    ComposerSourceAuthType::NONE, null => $request,
-                    ComposerSourceAuthType::BASIC => $request->withBasicAuth(
-                        (string) $this->source->composerUsername(),
-                        (string) $this->source->composerPassword(),
-                    ),
-                    ComposerSourceAuthType::BEARER => $request->withToken((string) $this->source->composerToken()),
-                };
+                if ($this->source->auth_type === ComposerSourceAuthType::BASIC) {
+                    $username = $this->source->composerUsername();
+                    $password = $this->source->composerPassword();
+
+                    if ($username !== null && $password !== null) {
+                        $request = $request->withBasicAuth($username, $password);
+                    }
+                } elseif ($this->source->auth_type === ComposerSourceAuthType::BEARER) {
+                    $token = $this->source->composerToken();
+
+                    if ($token !== null) {
+                        $request = $request->withToken($token);
+                    }
+                }
             }
 
             try {

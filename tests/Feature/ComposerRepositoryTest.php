@@ -317,7 +317,10 @@ it('sends only the configured authentication header', function (ComposerSourceAu
 ]);
 
 it('treats encrypted empty composer credentials as missing', function (ComposerSourceAuthType $authType): void {
+    Http::fake(['https://private.example.test/packages.json' => Http::response(['packages' => []])]);
+
     $source = Source::factory()->composer()->create([
+        'url' => 'https://private.example.test',
         'auth_type' => $authType,
         'token' => encrypt(''),
         'username' => encrypt(''),
@@ -328,6 +331,10 @@ it('treats encrypted empty composer credentials as missing', function (ComposerS
         ->and($source->composerUsername())->toBeNull()
         ->and($source->composerPassword())->toBeNull()
         ->and($source->hasCredentials())->toBeFalse();
+
+    $source->composerClient()->validate();
+
+    Http::assertSent(fn ($request): bool => ! $request->hasHeader('Authorization'));
 })->with([
     ComposerSourceAuthType::BASIC,
     ComposerSourceAuthType::BEARER,
