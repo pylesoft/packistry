@@ -87,25 +87,31 @@ class Source extends Model
 
     public function composerToken(): ?string
     {
-        return filled($this->token) ? decrypt($this->token) : null;
+        $token = filled($this->token) ? decrypt($this->token) : null;
+
+        return filled($token) ? $token : null;
     }
 
     public function composerUsername(): ?string
     {
-        return filled($this->username) ? decrypt($this->username) : null;
+        $username = filled($this->username) ? decrypt($this->username) : null;
+
+        return filled($username) ? $username : null;
     }
 
     public function composerPassword(): ?string
     {
-        return filled($this->password) ? decrypt($this->password) : null;
+        $password = filled($this->password) ? decrypt($this->password) : null;
+
+        return filled($password) ? $password : null;
     }
 
     public function hasCredentials(): bool
     {
         return match ($this->auth_type) {
             ComposerUpstreamAuthType::NONE, null => false,
-            ComposerUpstreamAuthType::BASIC => filled($this->username) && filled($this->password),
-            ComposerUpstreamAuthType::BEARER => filled($this->token),
+            ComposerUpstreamAuthType::BASIC => filled($this->composerUsername()) && filled($this->composerPassword()),
+            ComposerUpstreamAuthType::BEARER => filled($this->composerToken()),
         };
     }
 

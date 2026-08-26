@@ -301,6 +301,23 @@ it('sends only the configured authentication header', function (ComposerUpstream
     'bearer' => [ComposerUpstreamAuthType::BEARER, 'Bearer token'],
 ]);
 
+it('treats encrypted empty composer credentials as missing', function (ComposerUpstreamAuthType $authType): void {
+    $source = Source::factory()->composer()->create([
+        'auth_type' => $authType,
+        'token' => encrypt(''),
+        'username' => encrypt(''),
+        'password' => encrypt(''),
+    ]);
+
+    expect($source->composerToken())->toBeNull()
+        ->and($source->composerUsername())->toBeNull()
+        ->and($source->composerPassword())->toBeNull()
+        ->and($source->hasCredentials())->toBeFalse();
+})->with([
+    ComposerUpstreamAuthType::BASIC,
+    ComposerUpstreamAuthType::BEARER,
+]);
+
 it('does not forward upstream authorization across an origin redirect', function (): void {
     $upstream = Source::factory()->composer()->basic()->create(['url' => 'https://private.example.test']);
 

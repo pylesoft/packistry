@@ -18,10 +18,12 @@ enum SourceProvider: string
     /** @return list<self> */
     public static function vcsCases(): array
     {
-        return array_filter(
-            self::cases(),
-            fn (self $provider): bool => $provider !== self::COMPOSER,
-        );
+        return [
+            self::GITEA,
+            self::GITHUB,
+            self::GITLAB,
+            self::BITBUCKET,
+        ];
     }
 
     public function clientClassString(): string
