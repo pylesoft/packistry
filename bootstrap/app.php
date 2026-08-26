@@ -28,7 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
         }
     )
     ->withSchedule(function (Schedule $schedule): void {
-        $schedule->command('composer-upstreams:refresh')
+        $schedule->command('composer-packages:refresh')
             ->hourly()
             ->onOneServer()
             ->withoutOverlapping();

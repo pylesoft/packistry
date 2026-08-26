@@ -9,9 +9,9 @@ use App\Jobs\RefreshComposerPackage;
 use App\Models\Package;
 use Illuminate\Console\Command;
 
-class RefreshComposerUpstreams extends Command
+class RefreshComposerPackages extends Command
 {
-    protected $signature = 'composer-upstreams:refresh';
+    protected $signature = 'composer-packages:refresh';
 
     protected $description = 'Dispatch refresh jobs for enrolled Composer packages';
 

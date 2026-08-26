@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Actions\Sources;
 
 use App\Actions\Sources\Inputs\StoreSourceInput;
-use App\Enums\ComposerUpstreamAuthType;
+use App\Enums\ComposerSourceAuthType;
 use App\Enums\SourceProvider;
 use App\Exceptions\FailedToParseUrlException;
 use App\Exceptions\InvalidTokenException;
@@ -57,7 +57,7 @@ class StoreSource
     private function storeComposerSource(StoreSourceInput $input): Source
     {
         $authType = $input->authType instanceof Optional
-            ? ComposerUpstreamAuthType::NONE
+            ? ComposerSourceAuthType::NONE
             : $input->authType;
         $username = $input->username instanceof Optional ? null : $input->username;
         $password = $input->password instanceof Optional ? null : $input->password;
@@ -70,12 +70,12 @@ class StoreSource
             'name' => $input->name,
             'provider' => SourceProvider::COMPOSER,
             'url' => $this->composerUrl($input->url),
-            'token' => encrypt($authType === ComposerUpstreamAuthType::BEARER ? (string) $token : ''),
+            'token' => encrypt($authType === ComposerSourceAuthType::BEARER ? (string) $token : ''),
             'secret' => encrypt(Str::random()),
             'metadata' => $input->metadata ?? [],
             'auth_type' => $authType,
-            'username' => $authType === ComposerUpstreamAuthType::BASIC ? encrypt((string) $username) : null,
-            'password' => $authType === ComposerUpstreamAuthType::BASIC ? encrypt((string) $password) : null,
+            'username' => $authType === ComposerSourceAuthType::BASIC ? encrypt((string) $username) : null,
+            'password' => $authType === ComposerSourceAuthType::BASIC ? encrypt((string) $password) : null,
             'enabled' => $input->enabled instanceof Optional ? true : $input->enabled,
         ]);
 
@@ -102,13 +102,13 @@ class StoreSource
         return $url;
     }
 
-    private function validateCredentials(ComposerUpstreamAuthType $authType, ?string $username, ?string $password, ?string $token): void
+    private function validateCredentials(ComposerSourceAuthType $authType, ?string $username, ?string $password, ?string $token): void
     {
-        if ($authType === ComposerUpstreamAuthType::BASIC && (blank($username) || blank($password))) {
+        if ($authType === ComposerSourceAuthType::BASIC && (blank($username) || blank($password))) {
             throw ValidationException::withMessages(['password' => 'Basic authentication requires a username and password.']);
         }
 
-        if ($authType === ComposerUpstreamAuthType::BEARER && blank($token)) {
+        if ($authType === ComposerSourceAuthType::BEARER && blank($token)) {
             throw ValidationException::withMessages(['token' => 'Bearer authentication requires a token.']);
         }
     }

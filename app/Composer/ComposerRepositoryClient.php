@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Composer;
 
-use App\Enums\ComposerUpstreamAuthType;
-use App\Exceptions\ComposerUpstreamException;
+use App\Enums\ComposerSourceAuthType;
+use App\Exceptions\ComposerRepositoryException;
 use App\Models\Source;
 use Composer\MetadataMinifier\MetadataMinifier;
 use Illuminate\Http\Client\ConnectionException;
@@ -13,7 +13,7 @@ use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
-readonly class ComposerUpstreamClient
+readonly class ComposerRepositoryClient
 {
     private const int MAX_ARCHIVE_BYTES = 268_435_456;
 
@@ -23,7 +23,7 @@ readonly class ComposerUpstreamClient
     private const int MAX_PACKAGE_VERSIONS = 10_000;
 
     public function __construct(
-        private Source $upstream,
+        private Source $source,
         private ?OutboundUrlGuard $urlGuard = null,
     ) {}
 
@@ -33,12 +33,12 @@ readonly class ComposerUpstreamClient
         $response = $this->get($this->endpoint('packages.json'));
 
         if ($response->failed()) {
-            throw new ComposerUpstreamException('Composer upstream connection failed.');
+            throw new ComposerRepositoryException('Composer upstream connection failed.');
         }
 
         $payload = $response->json();
         if (! is_array($payload)) {
-            throw new ComposerUpstreamException('Composer upstream returned invalid JSON.');
+            throw new ComposerRepositoryException('Composer upstream returned invalid JSON.');
         }
 
         return [
@@ -54,7 +54,7 @@ readonly class ComposerUpstreamClient
     public function package(string $name, ?string $etag = null, ?string $lastModified = null): array
     {
         if (preg_match('/^[^\/\s]+\/[^\/\s]+$/', $name) !== 1) {
-            throw new ComposerUpstreamException('Package name must be a Composer vendor/name.');
+            throw new ComposerRepositoryException('Package name must be a Composer vendor/name.');
         }
 
         [$vendor, $package] = explode('/', $name, 2);
@@ -72,10 +72,10 @@ readonly class ComposerUpstreamClient
             ];
         }
         if ($response->status() === 404) {
-            throw new ComposerUpstreamException('Package was not found upstream.');
+            throw new ComposerRepositoryException('Package was not found upstream.');
         }
         if ($response->failed()) {
-            throw new ComposerUpstreamException('Composer package metadata request failed.');
+            throw new ComposerRepositoryException('Composer package metadata request failed.');
         }
 
         $payload = $response->json();
@@ -84,14 +84,14 @@ readonly class ComposerUpstreamClient
             : null;
 
         if ($versions === null) {
-            throw new ComposerUpstreamException('Composer upstream returned invalid package metadata.');
+            throw new ComposerRepositoryException('Composer upstream returned invalid package metadata.');
         }
         if (count($versions) > self::MAX_PACKAGE_VERSIONS) {
-            throw new ComposerUpstreamException('Composer package metadata contains too many versions.');
+            throw new ComposerRepositoryException('Composer package metadata contains too many versions.');
         }
         if (($payload['minified'] ?? null) === 'composer/2.0') {
             if (collect($versions)->contains(fn ($version): bool => ! is_array($version))) {
-                throw new ComposerUpstreamException('Composer upstream returned invalid package metadata.');
+                throw new ComposerRepositoryException('Composer upstream returned invalid package metadata.');
             }
 
             $versions = MetadataMinifier::expand($versions);
@@ -100,7 +100,7 @@ readonly class ComposerUpstreamClient
         $indexedVersions = [];
         foreach ($versions as $version) {
             if (! is_array($version) || ! isset($version['version']) || ! is_string($version['version'])) {
-                throw new ComposerUpstreamException('Composer upstream returned invalid package metadata.');
+                throw new ComposerRepositoryException('Composer upstream returned invalid package metadata.');
             }
 
             $indexedVersions[$version['version']] = $version;
@@ -120,7 +120,7 @@ readonly class ComposerUpstreamClient
         $contentLength = $response->header('Content-Length');
         if (($contentLength !== '' && (int) $contentLength > self::MAX_ARCHIVE_BYTES)
             || (is_file($path) && filesize($path) > self::MAX_ARCHIVE_BYTES)) {
-            throw new ComposerUpstreamException('Composer package archive exceeds the size limit.');
+            throw new ComposerRepositoryException('Composer package archive exceeds the size limit.');
         }
 
         return $response;
@@ -128,7 +128,7 @@ readonly class ComposerUpstreamClient
 
     public function endpoint(string $path): string
     {
-        return rtrim($this->upstream->url, '/').'/'.ltrim($path, '/');
+        return rtrim($this->source->url, '/').'/'.ltrim($path, '/');
     }
 
     /** @param array<string, string> $headers */
@@ -139,14 +139,14 @@ readonly class ComposerUpstreamClient
         for ($attempt = 0; $attempt < 4; $attempt++) {
             $addresses = $this->guard()->ensureSafe(
                 $current,
-                $this->upstream->auth_type !== ComposerUpstreamAuthType::NONE,
+                $this->source->auth_type !== ComposerSourceAuthType::NONE,
             );
             $response = $this->requestPinned($current, $addresses, $headers, $sink);
             if ($sink === null) {
                 $contentLength = $response->header('Content-Length');
                 if (($contentLength !== '' && (int) $contentLength > self::MAX_METADATA_BYTES)
                     || strlen($response->body()) > self::MAX_METADATA_BYTES) {
-                    throw new ComposerUpstreamException('Composer upstream metadata exceeds the size limit.');
+                    throw new ComposerRepositoryException('Composer upstream metadata exceeds the size limit.');
                 }
             }
             $redirect = $response->redirect();
@@ -162,7 +162,7 @@ readonly class ComposerUpstreamClient
             $current = $this->resolveUrl($current, $location);
         }
 
-        throw new ComposerUpstreamException('Composer upstream redirected too many times.');
+        throw new ComposerRepositoryException('Composer upstream redirected too many times.');
     }
 
     /**
@@ -173,13 +173,13 @@ readonly class ComposerUpstreamClient
     {
         $parts = parse_url($url);
         if (! is_array($parts) || ! isset($parts['scheme'], $parts['host'])) {
-            throw new ComposerUpstreamException('Composer upstream URL is invalid.');
+            throw new ComposerRepositoryException('Composer upstream URL is invalid.');
         }
 
         $host = trim($parts['host'], '[]');
         $port = $this->port($parts);
         if ($port === null) {
-            throw new ComposerUpstreamException('Composer upstream URL is invalid.');
+            throw new ComposerRepositoryException('Composer upstream URL is invalid.');
         }
 
         foreach ($addresses as $index => $address) {
@@ -189,15 +189,15 @@ readonly class ComposerUpstreamClient
                 'on_headers' => static function ($response) use ($limit, $sink): void {
                     $contentEncoding = strtolower($response->getHeaderLine('Content-Encoding'));
                     if ($sink === null && $contentEncoding !== '' && $contentEncoding !== 'identity') {
-                        throw new ComposerUpstreamException('Composer upstream returned unsupported content encoding.');
+                        throw new ComposerRepositoryException('Composer upstream returned unsupported content encoding.');
                     }
                     if ((int) $response->getHeaderLine('Content-Length') > $limit) {
-                        throw new ComposerUpstreamException('Composer upstream response exceeds the size limit.');
+                        throw new ComposerRepositoryException('Composer upstream response exceeds the size limit.');
                     }
                 },
                 'progress' => static function (int $downloadTotal, int $downloadedBytes) use ($limit): void {
                     if ($downloadTotal > $limit || $downloadedBytes > $limit) {
-                        throw new ComposerUpstreamException('Composer upstream response exceeds the size limit.');
+                        throw new ComposerRepositoryException('Composer upstream response exceeds the size limit.');
                     }
                 },
             ];
@@ -218,14 +218,14 @@ readonly class ComposerUpstreamClient
                 $request = $request->sink($sink);
             }
 
-            if ($this->sameOrigin($url, $this->upstream->url)) {
-                $request = match ($this->upstream->auth_type) {
-                    ComposerUpstreamAuthType::NONE, null => $request,
-                    ComposerUpstreamAuthType::BASIC => $request->withBasicAuth(
-                        (string) $this->upstream->composerUsername(),
-                        (string) $this->upstream->composerPassword(),
+            if ($this->sameOrigin($url, $this->source->url)) {
+                $request = match ($this->source->auth_type) {
+                    ComposerSourceAuthType::NONE, null => $request,
+                    ComposerSourceAuthType::BASIC => $request->withBasicAuth(
+                        (string) $this->source->composerUsername(),
+                        (string) $this->source->composerPassword(),
                     ),
-                    ComposerUpstreamAuthType::BEARER => $request->withToken((string) $this->upstream->composerToken()),
+                    ComposerSourceAuthType::BEARER => $request->withToken((string) $this->source->composerToken()),
                 };
             }
 
@@ -233,12 +233,12 @@ readonly class ComposerUpstreamClient
                 return $request->get($url);
             } catch (ConnectionException) {
                 if ($index === array_key_last($addresses)) {
-                    throw new ComposerUpstreamException('Composer upstream connection failed.');
+                    throw new ComposerRepositoryException('Composer upstream connection failed.');
                 }
             }
         }
 
-        throw new ComposerUpstreamException('Composer upstream connection failed.');
+        throw new ComposerRepositoryException('Composer upstream connection failed.');
     }
 
     private function resolveEntry(string $host, int $port, string $address): string
@@ -289,7 +289,7 @@ readonly class ComposerUpstreamClient
 
         $parts = parse_url($base);
         if (! is_array($parts) || ! isset($parts['scheme'], $parts['host'])) {
-            throw new ComposerUpstreamException('Composer upstream returned an invalid redirect.');
+            throw new ComposerRepositoryException('Composer upstream returned an invalid redirect.');
         }
 
         $origin = $parts['scheme'].'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
