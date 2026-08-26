@@ -139,7 +139,7 @@ readonly class ComposerRepositoryClient
         for ($attempt = 0; $attempt < 4; $attempt++) {
             $addresses = $this->guard()->ensureSafe(
                 $current,
-                $this->source->auth_type !== ComposerSourceAuthType::NONE,
+                ($this->source->auth_type ?? ComposerSourceAuthType::NONE) !== ComposerSourceAuthType::NONE,
             );
             $response = $this->requestPinned($current, $addresses, $headers, $sink);
             if ($sink === null) {

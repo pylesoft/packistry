@@ -95,6 +95,20 @@ it('requires HTTPS for authenticated upstreams', function (): void {
     Http::assertNothingSent();
 });
 
+it('treats a missing authentication type as unauthenticated', function (): void {
+    Http::fake([
+        'http://packages.example.test/packages.json' => Http::response(['packages' => []]),
+    ]);
+
+    Source::factory()->composer()->create([
+        'url' => 'http://packages.example.test',
+        'auth_type' => null,
+    ])->composerClient()->validate();
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'http://packages.example.test/packages.json'
+        && ! $request->hasHeader('Authorization'));
+});
+
 it('rejects private literal upstream targets', function (): void {
     user(Permission::SOURCE_CREATE);
     Http::fake();
