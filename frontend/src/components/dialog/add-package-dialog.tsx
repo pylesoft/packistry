@@ -6,8 +6,9 @@ import { FormRepositorySelect } from '@/components/form/elements/form-repository
 import { FormSourceSelect } from '@/components/form/elements/form-source-select'
 import { FormSourceProjectCheckboxGroup } from '@/components/form/elements/form-source-project-checkbox-group'
 import { FormSwitch } from '@/components/form/elements/form-switch'
+import { FormInput } from '@/components/form/elements/form-input'
 import { Form } from '@/components/ui/form'
-import { useStorePackage } from '@/api/hooks'
+import { useSources, useStorePackage } from '@/api/hooks'
 import { useForm } from '@/hooks/useForm'
 import { toast } from 'sonner'
 import { useInnerDialog } from '@/components/dialog/use-search-dialog'
@@ -28,6 +29,7 @@ export function AddPackageDialog(props: AddPackageDialogProps) {
             source: '',
             projects: [],
             webhook: true,
+            name: '',
         },
         onSuccess() {
             toast('Package import has been started')
@@ -38,6 +40,8 @@ export function AddPackageDialog(props: AddPackageDialogProps) {
     })
 
     const source = form.watch('source')
+    const sources = useSources()
+    const selectedSource = sources.data?.find((item) => item.id === source)
 
     return (
         <Dialog {...dialogProps}>
@@ -66,7 +70,16 @@ export function AddPackageDialog(props: AddPackageDialogProps) {
                             description="Choose the source from which to add a package."
                             control={form.control}
                         />
-                        {source && (
+                        {selectedSource?.provider === 'composer' && (
+                            <FormInput
+                                name="name"
+                                label="Exact package name"
+                                placeholder="vendor/package"
+                                description="Enter the exact package name published by the Composer repository."
+                                control={form.control}
+                            />
+                        )}
+                        {selectedSource && selectedSource.provider !== 'composer' && (
                             <>
                                 <FormSourceProjectCheckboxGroup
                                     source={source}

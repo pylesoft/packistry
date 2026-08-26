@@ -29,7 +29,7 @@ class ImportBranches implements ShouldQueue
     {
         $batch = $this->batch();
 
-        $this->source->client()->branches($this->project)
+        $this->source->vcsClient()->branches($this->project)
             ->each(function (Importable $branch) use ($batch): void {
                 $batch?->add(new ImportImportable(
                     $this->source,

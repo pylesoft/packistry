@@ -6,6 +6,7 @@ import { CodeIcon } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { Optional } from '@/helpers'
+import { providerNames } from '@/api/source-provider'
 
 export function FormSourceSelect(props: Omit<Optional<FormSelectProps, 'name' | 'label'>, 'options'>) {
     const query = useSources()
@@ -30,9 +31,9 @@ export function FormSourceSelect(props: Omit<Optional<FormSelectProps, 'name' | 
                     </Link>
                 ),
             }}
-            options={(query.data || []).map((repository) => ({
-                value: repository.id,
-                label: repository.name,
+            options={(query.data || []).map((source) => ({
+                value: source.id,
+                label: `${source.name} (${providerNames[source.provider]})`,
             }))}
         />
     )

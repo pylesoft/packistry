@@ -6,7 +6,6 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AuthenticationSourceController;
 use App\Http\Controllers\BatchController;
 use App\Http\Controllers\Composer;
-use App\Http\Controllers\ComposerUpstreamController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeployTokenController;
 use App\Http\Controllers\PackageController;
@@ -62,13 +61,6 @@ Route::middleware('web')->prefix('/api')->group(function (): void {
         Route::get('/sources/{source}/projects', [SourceController::class, 'projects']);
         Route::apiResource('/sources', SourceController::class)
             ->only(['index', 'store', 'update', 'destroy']);
-
-        Route::apiResource('/composer-upstreams', ComposerUpstreamController::class)
-            ->parameters(['composer-upstreams' => 'composerUpstream'])
-            ->only(['index', 'store', 'update', 'destroy']);
-        Route::post('/composer-upstreams/{composerUpstream}/packages', [ComposerUpstreamController::class, 'storePackage']);
-        Route::post('/composer-upstreams/{composerUpstream}/refresh', [ComposerUpstreamController::class, 'refresh']);
-        Route::post('/packages/{packageId}/refresh', [ComposerUpstreamController::class, 'refreshPackage']);
 
         Route::apiResource('/repositories', RepositoryController::class)
             ->only(['index', 'store', 'destroy', 'update']);

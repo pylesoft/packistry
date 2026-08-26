@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 use App\Enums\Permission;
 use App\Jobs\RefreshComposerPackage;
-use App\Models\ComposerUpstream;
 use App\Models\Package;
 use App\Models\Repository;
+use App\Models\Source;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
 
 use function Pest\Laravel\postJson;
 
@@ -17,9 +18,8 @@ it('rebuilds a mirrored Composer package from its upstream', function (): void {
 
     $package = Package::factory()
         ->for(Repository::factory()->root())
-        ->for(ComposerUpstream::factory(), 'composerUpstream')
+        ->for(Source::factory()->composer())
         ->create([
-            'source_id' => null,
             'provider_id' => null,
         ]);
 
@@ -32,4 +32,26 @@ it('rebuilds a mirrored Composer package from its upstream', function (): void {
         return $job instanceof RefreshComposerPackage
             && $job->packageId === $package->id;
     });
+});
+
+it('rejects a duplicate mirrored Composer package rebuild', function (): void {
+    Bus::fake();
+    user([Permission::UNSCOPED, Permission::PACKAGE_UPDATE]);
+
+    $package = Package::factory()
+        ->for(Repository::factory()->root())
+        ->for(Source::factory()->composer())
+        ->create(['provider_id' => null]);
+    $lock = Cache::lock('composer-package-refresh:'.$package->id, 7200);
+
+    expect($lock->get())->toBeTrue();
+
+    try {
+        postJson("/api/packages/{$package->id}/rebuild")
+            ->assertConflict();
+    } finally {
+        $lock->release();
+    }
+
+    Bus::assertNothingBatched();
 });

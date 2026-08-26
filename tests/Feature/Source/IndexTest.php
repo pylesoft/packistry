@@ -20,6 +20,6 @@ it('indexes', function (?User $user, int $status): void {
     }
 
     $response->assertExactJson(
-        resourceAsJson(SourceResource::collection($sources))
+        resourceAsJson(SourceResource::collection($sources->loadCount('packages')))
     );
 })->with(guestAndUsers(Permission::SOURCE_READ));

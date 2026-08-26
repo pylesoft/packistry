@@ -1,9 +1,9 @@
 import { z } from 'zod'
 import { del, get, patch, post } from '@/api/axios'
+import { sourceProvider } from '@/api/source-provider'
 
-const provider = z.enum(['gitlab', 'github', 'gitea', 'bitbucket'])
-
-export type Provider = z.infer<typeof provider>
+export const composerSourceAuthType = z.enum(['none', 'basic', 'bearer'])
+export type ComposerSourceAuthType = z.infer<typeof composerSourceAuthType>
 
 const baseSource = z.object({
     id: z.coerce.string(),
@@ -36,6 +36,15 @@ export const source = z.discriminatedUnion('provider', [
         }),
         ...baseSource.shape,
     }),
+    z.object({
+        provider: z.literal('composer'),
+        authType: composerSourceAuthType,
+        hasCredentials: z.boolean().default(false),
+        enabled: z.boolean().default(true),
+        lastCheckedAt: z.coerce.date().nullable().optional(),
+        packagesCount: z.number().optional(),
+        ...baseSource.shape,
+    }),
 ])
 
 export type Source = z.infer<typeof source>
@@ -46,30 +55,69 @@ export function fetchSources() {
 
 export const storeSourceInput = z.object({
     name: z.string(),
-    provider: provider,
+    provider: sourceProvider,
     url: z.string(),
-    token: z.string(),
-    metadata: z.any(),
+    token: z.string().optional(),
+    metadata: z.any().optional(),
+    authType: composerSourceAuthType.optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+    enabled: z.boolean().optional(),
 })
 
 export type StoreSourceInput = z.infer<typeof storeSourceInput>
 
-export function storeSource(input: z.infer<typeof storeSourceInput>) {
-    return post(source, '/sources', input)
+function sourceInput(input: StoreSourceInput | UpdateSourceInput) {
+    const { authType, enabled, username, password, token, metadata, ...base } = input
+
+    if (input.provider !== 'composer') {
+        return { ...base, ...(token ? { token } : {}), metadata }
+    }
+
+    return {
+        ...base,
+        authType,
+        enabled,
+        ...(username ? { username } : {}),
+        ...(password ? { password } : {}),
+        ...(token ? { token } : {}),
+    }
+}
+
+export function storeSource(input: StoreSourceInput) {
+    return post(source, '/sources', sourceInput(input))
 }
 
 export const updateSourceInput = z.object({
     id: z.string(),
     name: z.string(),
+    provider: sourceProvider,
     url: z.string(),
     token: z.string().optional(),
-    metadata: z.any(),
+    metadata: z.any().optional(),
+    authType: composerSourceAuthType.optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+    enabled: z.boolean().optional(),
 })
 
 export type UpdateSourceInput = z.infer<typeof updateSourceInput>
 
 export function updateSource(input: z.infer<typeof updateSourceInput>) {
-    return patch(source, `/sources/${input.id}`, input)
+    const { id, provider, authType, enabled, username, password, token, metadata, ...base } = input
+    const values =
+        provider === 'composer'
+            ? {
+                  ...base,
+                  authType,
+                  enabled,
+                  ...(username ? { username } : {}),
+                  ...(password ? { password } : {}),
+                  ...(token ? { token } : {}),
+              }
+            : { ...base, ...(token ? { token } : {}), metadata }
+
+    return patch(source, `/sources/${id}`, values)
 }
 
 export function deleteSource(sourceId: string) {

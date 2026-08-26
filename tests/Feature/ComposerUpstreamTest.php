@@ -9,9 +9,9 @@ use App\Enums\ComposerUpstreamAuthType;
 use App\Enums\Permission;
 use App\Exceptions\ComposerUpstreamException;
 use App\Jobs\RefreshComposerPackage;
-use App\Models\ComposerUpstream;
 use App\Models\Package;
 use App\Models\Repository;
+use App\Models\Source;
 use App\Models\Version;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Bus;
@@ -55,13 +55,14 @@ function composerUpstreamArchive(string $name, string $version): string
 }
 
 it('validates an upstream without exposing or storing plaintext credentials', function (): void {
-    user(Permission::COMPOSER_UPSTREAM_CREATE);
+    user(Permission::SOURCE_CREATE);
 
     Http::fake([
         'https://private.example.test/packages.json' => Http::response(['packages' => []]),
     ]);
 
-    postJson('/api/composer-upstreams', [
+    postJson('/api/sources', [
+        'provider' => 'composer',
         'name' => 'Private',
         'url' => 'https://private.example.test',
         'auth_type' => 'basic',
@@ -71,17 +72,18 @@ it('validates an upstream without exposing or storing plaintext credentials', fu
         ->assertJsonMissing(['password' => 'license-secret'])
         ->assertJsonPath('has_credentials', true);
 
-    $upstream = ComposerUpstream::query()->firstOrFail();
-    expect($upstream->password)->toBe('license-secret')
+    $upstream = Source::query()->firstOrFail();
+    expect($upstream->composerPassword())->toBe('license-secret')
         ->and($upstream->getRawOriginal('password'))->not->toBe('license-secret')
         ->and($upstream->last_checked_at)->not->toBeNull();
 });
 
 it('requires HTTPS for authenticated upstreams', function (): void {
-    user(Permission::COMPOSER_UPSTREAM_CREATE);
+    user(Permission::SOURCE_CREATE);
     Http::fake();
 
-    postJson('/api/composer-upstreams', [
+    postJson('/api/sources', [
+        'provider' => 'composer',
         'name' => 'Private',
         'url' => 'http://packages.example.test',
         'auth_type' => 'basic',
@@ -93,10 +95,11 @@ it('requires HTTPS for authenticated upstreams', function (): void {
 });
 
 it('rejects private literal upstream targets', function (): void {
-    user(Permission::COMPOSER_UPSTREAM_CREATE);
+    user(Permission::SOURCE_CREATE);
     Http::fake();
 
-    postJson('/api/composer-upstreams', [
+    postJson('/api/sources', [
+        'provider' => 'composer',
         'name' => 'Private',
         'url' => 'https://169.254.169.254/latest/meta-data',
         'auth_type' => 'none',
@@ -135,7 +138,7 @@ it('pins the validated address while preserving the request hostname', function 
         'https://private.example.test/packages.json' => Http::response(['packages' => []]),
     ]);
 
-    ComposerUpstream::factory()->create(['url' => 'https://private.example.test'])->client()->validate();
+    Source::factory()->composer()->create(['url' => 'https://private.example.test'])->composerClient()->validate();
 
     expect($options[0]['curl'][CURLOPT_RESOLVE])->toBe([
         'private.example.test:443:[2001:4860:4860::8888]',
@@ -165,7 +168,7 @@ it('retries another validated pinned address after a connection failure', functi
         return Http::response(['packages' => []]);
     });
 
-    ComposerUpstream::factory()->create(['url' => 'https://private.example.test'])->client()->validate();
+    Source::factory()->composer()->create(['url' => 'https://private.example.test'])->composerClient()->validate();
 
     expect($options[0]['curl'][CURLOPT_RESOLVE])->toBe(['private.example.test:443:93.184.216.34'])
         ->and($options[1]['curl'][CURLOPT_RESOLVE])->toBe(['private.example.test:443:142.250.72.14']);
@@ -178,8 +181,8 @@ it('does not expose signed archive URLs in terminal connection errors', function
     $caught = null;
 
     try {
-        ComposerUpstream::factory()->create(['url' => 'https://private.example.test'])
-            ->client()
+        Source::factory()->composer()->create(['url' => 'https://private.example.test'])
+            ->composerClient()
             ->archive('https://cdn.example.test/archive.zip?token=secret', $path);
     } catch (ComposerUpstreamException $exception) {
         $caught = $exception;
@@ -203,10 +206,11 @@ it('rejects any user-info component before resolving the host', function (string
 ]);
 
 it('rejects upstream URLs containing credentials, queries, or fragments', function (string $url): void {
-    user(Permission::COMPOSER_UPSTREAM_CREATE);
+    user(Permission::SOURCE_CREATE);
     Http::fake();
 
-    postJson('/api/composer-upstreams', [
+    postJson('/api/sources', [
+        'provider' => 'composer',
         'name' => 'Private',
         'url' => $url,
         'auth_type' => 'none',
@@ -220,12 +224,13 @@ it('rejects upstream URLs containing credentials, queries, or fragments', functi
 ]);
 
 it('requires connection fields when creating an upstream', function (): void {
-    user(Permission::COMPOSER_UPSTREAM_CREATE);
+    user(Permission::SOURCE_CREATE);
     Http::fake();
 
-    postJson('/api/composer-upstreams', [])
+    postJson('/api/sources', [
+        'provider' => 'composer', ])
         ->assertUnprocessable()
-        ->assertJsonValidationErrors(['name', 'url', 'auth_type']);
+        ->assertJsonValidationErrors(['name', 'url']);
 
     Http::assertNothingSent();
 });
@@ -233,10 +238,10 @@ it('requires connection fields when creating an upstream', function (): void {
 it('synchronizes archives and publishes only Packistry distribution URLs', function (): void {
     Storage::fake();
     $repository = Repository::factory()->root()->create();
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     $package = Package::factory()->for($repository)->create([
         'name' => 'test/test',
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
         'upstream_last_error' => 'Previous failure',
     ]);
     $archive = file_get_contents(__DIR__.'/../Fixtures/project.zip');
@@ -262,7 +267,7 @@ it('synchronizes archives and publishes only Packistry distribution URLs', funct
         'https://private.example.test/archive.zip' => Http::response($archive, 200, ['content-type' => 'application/zip']),
     ]);
 
-    app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream']));
+    app(SynchronizeComposerPackage::class)->handle($package->fresh(['source']));
 
     $version = $package->versions()->firstOrFail();
     expect($version->archive_path)->not->toBeNull()
@@ -275,7 +280,7 @@ it('synchronizes archives and publishes only Packistry distribution URLs', funct
 });
 
 it('sends only the configured authentication header', function (ComposerUpstreamAuthType $authType, ?string $header): void {
-    $upstream = ComposerUpstream::factory()
+    $upstream = Source::factory()->composer()
         ->state(['url' => 'https://private.example.test'])
         ->when($authType === ComposerUpstreamAuthType::BASIC, fn ($factory) => $factory->basic('buyer@example.test', 'license'))
         ->when($authType === ComposerUpstreamAuthType::BEARER, fn ($factory) => $factory->bearer('token'))
@@ -283,7 +288,7 @@ it('sends only the configured authentication header', function (ComposerUpstream
 
     Http::fake(['https://private.example.test/packages.json' => Http::response(['packages' => []])]);
 
-    $upstream->client()->validate();
+    $upstream->composerClient()->validate();
 
     Http::assertSent(function ($request) use ($header): bool {
         return $header === null
@@ -296,15 +301,32 @@ it('sends only the configured authentication header', function (ComposerUpstream
     'bearer' => [ComposerUpstreamAuthType::BEARER, 'Bearer token'],
 ]);
 
+it('treats encrypted empty composer credentials as missing', function (ComposerUpstreamAuthType $authType): void {
+    $source = Source::factory()->composer()->create([
+        'auth_type' => $authType,
+        'token' => encrypt(''),
+        'username' => encrypt(''),
+        'password' => encrypt(''),
+    ]);
+
+    expect($source->composerToken())->toBeNull()
+        ->and($source->composerUsername())->toBeNull()
+        ->and($source->composerPassword())->toBeNull()
+        ->and($source->hasCredentials())->toBeFalse();
+})->with([
+    ComposerUpstreamAuthType::BASIC,
+    ComposerUpstreamAuthType::BEARER,
+]);
+
 it('does not forward upstream authorization across an origin redirect', function (): void {
-    $upstream = ComposerUpstream::factory()->basic()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->basic()->create(['url' => 'https://private.example.test']);
 
     Http::fake([
         'https://private.example.test/packages.json' => Http::response('', 302, ['Location' => 'https://cdn.example.test/packages.json']),
         'https://cdn.example.test/packages.json' => Http::response(['packages' => []]),
     ]);
 
-    $upstream->client()->validate();
+    $upstream->composerClient()->validate();
 
     Http::assertSent(fn ($request): bool => $request->url() === 'https://private.example.test/packages.json'
         && $request->hasHeader('Authorization'));
@@ -327,50 +349,50 @@ it('pins each redirect origin to its separately validated address', function ():
             return $handler($request, $requestOptions);
         };
     });
-    $upstream = ComposerUpstream::factory()->basic()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->basic()->create(['url' => 'https://private.example.test']);
     Http::fake([
         'https://private.example.test/packages.json' => Http::response('', 302, ['Location' => 'https://cdn.example.test/packages.json']),
         'https://cdn.example.test/packages.json' => Http::response(['packages' => []]),
     ]);
 
-    $upstream->client()->validate();
+    $upstream->composerClient()->validate();
 
     expect($options[0]['curl'][CURLOPT_RESOLVE])->toBe(['private.example.test:443:93.184.216.34'])
         ->and($options[1]['curl'][CURLOPT_RESOLVE])->toBe(['cdn.example.test:443:142.250.72.14']);
 });
 
 it('does not forward upstream authorization across a scheme-relative origin redirect', function (): void {
-    $upstream = ComposerUpstream::factory()->basic()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->basic()->create(['url' => 'https://private.example.test']);
 
     Http::fake([
         'https://private.example.test/packages.json' => Http::response('', 302, ['Location' => '//cdn.example.test/packages.json']),
         'https://cdn.example.test/packages.json' => Http::response(['packages' => []]),
     ]);
 
-    $upstream->client()->validate();
+    $upstream->composerClient()->validate();
 
     Http::assertSent(fn ($request): bool => $request->url() === 'https://cdn.example.test/packages.json'
         && ! $request->hasHeader('Authorization'));
 });
 
 it('rejects an unsafe redirect before requesting it', function (): void {
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     Http::fake([
         'https://private.example.test/packages.json' => Http::response('', 302, ['Location' => 'http://127.0.0.1/internal']),
     ]);
 
-    expect(fn () => $upstream->client()->validate())->toThrow(ComposerUpstreamException::class);
+    expect(fn () => $upstream->composerClient()->validate())->toThrow(ComposerUpstreamException::class);
 
     Http::assertSentCount(1);
 });
 
 it('rejects an authenticated upstream redirect to HTTP', function (): void {
-    $upstream = ComposerUpstream::factory()->basic()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->basic()->create(['url' => 'https://private.example.test']);
     Http::fake([
         'https://private.example.test/packages.json' => Http::response('', 302, ['Location' => 'http://cdn.example.test/packages.json']),
     ]);
 
-    expect(fn () => $upstream->client()->validate())->toThrow(ComposerUpstreamException::class);
+    expect(fn () => $upstream->composerClient()->validate())->toThrow(ComposerUpstreamException::class);
 
     Http::assertSentCount(1);
 });
@@ -380,51 +402,53 @@ it('rejects enrollment takeover and scopes the target repository', function (): 
     $allowed = Repository::factory()->create();
     $user->repositories()->attach($allowed);
     $outside = Repository::factory()->create();
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     $manual = Package::factory()->for($allowed)->create(['name' => 'test/test']);
 
-    postJson("/api/composer-upstreams/{$upstream->id}/packages", [
-        'repository_id' => $manual->repository_id,
+    postJson('/api/packages', [
+        'source' => (string) $upstream->id,
+        'repository' => (string) $manual->repository_id,
         'name' => $manual->name,
     ])->assertUnprocessable();
 
-    postJson("/api/composer-upstreams/{$upstream->id}/packages", [
-        'repository_id' => $outside->id,
+    postJson('/api/packages', [
+        'source' => (string) $upstream->id,
+        'repository' => (string) $outside->id,
         'name' => 'test/test',
     ])->assertNotFound();
 
-    expect($manual->fresh()->composer_upstream_id)->toBeNull();
+    expect($manual->fresh()->source_id)->toBeNull();
 });
 
 it('requires credentials when changing authentication type and clears obsolete secrets', function (): void {
-    user(Permission::COMPOSER_UPSTREAM_UPDATE);
-    $upstream = ComposerUpstream::factory()->basic()->create(['url' => 'https://example.com']);
+    user(Permission::SOURCE_UPDATE);
+    $upstream = Source::factory()->composer()->basic()->create(['url' => 'https://example.com']);
     Http::fake(['https://example.com/packages.json' => Http::response(['packages' => []])]);
 
-    patchJson("/api/composer-upstreams/{$upstream->id}", [
+    patchJson("/api/sources/{$upstream->id}", [
         'auth_type' => 'bearer',
     ])->assertUnprocessable();
 
-    patchJson("/api/composer-upstreams/{$upstream->id}", [
+    patchJson("/api/sources/{$upstream->id}", [
         'auth_type' => 'bearer',
         'token' => 'new-token',
     ])->assertOk();
 
     $upstream->refresh();
-    expect($upstream->token)->toBe('new-token')
+    expect($upstream->composerToken())->toBe('new-token')
         ->and($upstream->username)->toBeNull()
         ->and($upstream->password)->toBeNull()
         ->and($upstream->last_checked_at)->not->toBeNull();
 });
 
 it('preserves write-only credentials when an edit submits blank secret fields', function (): void {
-    user(Permission::COMPOSER_UPSTREAM_UPDATE);
-    $upstream = ComposerUpstream::factory()->basic('buyer@example.test', 'license-secret')->create([
+    user(Permission::SOURCE_UPDATE);
+    $upstream = Source::factory()->composer()->basic('buyer@example.test', 'license-secret')->create([
         'url' => 'https://example.com',
     ]);
     Http::fake(['https://example.com/packages.json' => Http::response(['packages' => []])]);
 
-    patchJson("/api/composer-upstreams/{$upstream->id}", [
+    patchJson("/api/sources/{$upstream->id}", [
         'name' => 'Renamed',
         'auth_type' => 'basic',
         'username' => '',
@@ -433,8 +457,8 @@ it('preserves write-only credentials when an edit submits blank secret fields', 
 
     expect($upstream->refresh())
         ->name->toBe('Renamed')
-        ->username->toBe('buyer@example.test')
-        ->password->toBe('license-secret');
+        ->and($upstream->composerUsername())->toBe('buyer@example.test')
+        ->and($upstream->composerPassword())->toBe('license-secret');
 });
 
 it('dispatches an observable batch with the package option', function (): void {
@@ -442,7 +466,7 @@ it('dispatches an observable batch with the package option', function (): void {
     $user = user(Permission::PACKAGE_CREATE);
     $repository = Repository::factory()->create();
     $user->repositories()->attach($repository);
-    $upstream = ComposerUpstream::factory()->create();
+    $upstream = Source::factory()->composer()->create();
     Http::fake([
         rtrim($upstream->url, '/').'/p2/test/test.json' => Http::response([
             'packages' => ['test/test' => [['version' => '1.0.0', 'dist' => [
@@ -451,10 +475,11 @@ it('dispatches an observable batch with the package option', function (): void {
         ]),
     ]);
 
-    postJson("/api/composer-upstreams/{$upstream->id}/packages", [
-        'repository_id' => $repository->id,
+    postJson('/api/packages', [
+        'source' => (string) $upstream->id,
+        'repository' => (string) $repository->id,
         'name' => 'test/test',
-    ])->assertStatus(202);
+    ])->assertCreated();
 
     Bus::assertBatched(function ($batch): bool {
         $job = $batch->jobs->first();
@@ -469,32 +494,58 @@ it('dispatches an observable batch with the package option', function (): void {
     });
 });
 
+it('rejects duplicate enrollment while the Composer package is already synchronizing', function (): void {
+    Bus::fake();
+    $user = user(Permission::PACKAGE_CREATE);
+    $repository = Repository::factory()->create();
+    $user->repositories()->attach($repository);
+    $source = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
+    $package = Package::factory()->for($repository)->for($source)->create(['name' => 'test/test']);
+    Http::fake([
+        'https://private.example.test/p2/test/test.json' => Http::response([
+            'packages' => ['test/test' => [[
+                'version' => '1.0.0',
+                'dist' => ['type' => 'zip', 'url' => 'https://cdn.example.test/test.zip'],
+            ]]],
+        ]),
+    ]);
+
+    RefreshComposerPackage::dispatchFor($package);
+
+    postJson('/api/packages', [
+        'source' => (string) $source->id,
+        'repository' => (string) $repository->id,
+        'name' => $package->name,
+    ])->assertConflict();
+});
+
 it('distinguishes a missing package from an unavailable upstream during enrollment', function (int $status, string $field): void {
     Bus::fake();
     $user = user(Permission::PACKAGE_CREATE);
     $repository = Repository::factory()->create();
     $user->repositories()->attach($repository);
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     Http::fake([
         'https://private.example.test/p2/test/test.json' => Http::response([], $status),
     ]);
 
-    postJson("/api/composer-upstreams/{$upstream->id}/packages", [
-        'repository_id' => $repository->id,
+    postJson('/api/packages', [
+        'source' => (string) $upstream->id,
+        'repository' => (string) $repository->id,
         'name' => 'test/test',
     ])->assertUnprocessable()->assertJsonValidationErrors($field);
 
     expect($repository->packages()->where('name', 'test/test')->exists())->toBeFalse();
 })->with([
     'not found' => [404, 'name'],
-    'upstream unavailable' => [503, 'upstream'],
+    'upstream unavailable' => [503, 'source'],
 ]);
 
 it('deduplicates refresh batches before dispatch and releases the lock after failure', function (): void {
     Bus::fake();
-    $upstream = ComposerUpstream::factory()->create();
+    $upstream = Source::factory()->composer()->create();
     $package = Package::factory()->for(Repository::factory()->root()->create())->create([
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
     ]);
 
     $first = RefreshComposerPackage::dispatchFor($package);
@@ -516,10 +567,10 @@ it('deduplicates refresh batches before dispatch and releases the lock after fai
 
 it('retains the refresh lock across retryable failures until terminal failure', function (): void {
     Bus::fake();
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     $package = Package::factory()->for(Repository::factory()->root()->create())->create([
         'name' => 'test/test',
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
     ]);
 
     RefreshComposerPackage::dispatchFor($package);
@@ -544,48 +595,31 @@ it('retains the refresh lock across retryable failures until terminal failure', 
     $lock->release();
 });
 
-it('returns partial results when upstream-wide refresh skips an active package', function (): void {
+it('rejects rebuilding a Composer package when its source is disabled', function (): void {
     Bus::fake();
     $user = user(Permission::PACKAGE_UPDATE);
     $repository = Repository::factory()->create();
     $user->repositories()->attach($repository);
-    $upstream = ComposerUpstream::factory()->create();
-    $package = Package::factory()->for($repository)->create([
-        'composer_upstream_id' => $upstream->id,
-    ]);
+    $upstream = Source::factory()->composer()->create(['enabled' => false]);
+    $package = Package::factory()->for($repository)->for($upstream)->create();
 
-    RefreshComposerPackage::dispatchFor($package);
-
-    postJson("/api/composer-upstreams/{$upstream->id}/refresh")
-        ->assertAccepted()
-        ->assertJsonPath('accepted', 0)
-        ->assertJsonPath('skipped_count', 1)
-        ->assertJsonPath('skipped_package_ids.0', $package->id)
-        ->assertJsonPath('batch_ids', []);
-});
-
-it('rejects an upstream-wide refresh when the upstream is disabled', function (): void {
-    Bus::fake();
-    user(Permission::PACKAGE_UPDATE);
-    $upstream = ComposerUpstream::factory()->create(['enabled' => false]);
-
-    postJson("/api/composer-upstreams/{$upstream->id}/refresh")
+    postJson("/api/packages/{$package->id}/rebuild")
         ->assertUnprocessable()
-        ->assertJsonValidationErrors('upstream');
+        ->assertJsonValidationErrors('source');
 
     Bus::assertNothingBatched();
 });
 
 it('schedules only Composer packages whose hourly refresh is due', function (): void {
     Bus::fake();
-    $upstream = ComposerUpstream::factory()->create();
+    $upstream = Source::factory()->composer()->create();
     $repository = Repository::factory()->root()->create();
     $duePackage = Package::factory()->for($repository)->create([
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
         'upstream_checked_at' => now()->subHours(2),
     ]);
     Package::factory()->for($repository)->create([
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
         'upstream_checked_at' => now(),
     ]);
 
@@ -602,11 +636,11 @@ it('schedules only Composer packages whose hourly refresh is due', function (): 
 });
 
 it('reuses ETag metadata for a not-modified refresh', function (): void {
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     $repository = Repository::factory()->root()->create();
     $package = Package::factory()->for($repository)->create([
         'name' => 'test/test',
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
         'upstream_etag' => '"v1"',
     ]);
 
@@ -614,14 +648,14 @@ it('reuses ETag metadata for a not-modified refresh', function (): void {
         'https://private.example.test/p2/test/test.json' => Http::response('', 304),
     ]);
 
-    app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream']));
+    app(SynchronizeComposerPackage::class)->handle($package->fresh(['source']));
 
     Http::assertSent(fn ($request): bool => $request->header('If-None-Match')[0] === '"v1"');
     expect($package->fresh()->upstream_checked_at)->not->toBeNull();
 });
 
 it('expands Composer 2 minified metadata before mirroring it', function (): void {
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     Http::fake([
         'https://private.example.test/p2/test/test.json' => Http::response([
             'minified' => 'composer/2.0',
@@ -640,7 +674,7 @@ it('expands Composer 2 minified metadata before mirroring it', function (): void
         ]),
     ]);
 
-    $versions = $upstream->client()->package('test/test')['versions'];
+    $versions = $upstream->composerClient()->package('test/test')['versions'];
 
     expect($versions['2.0.0']['name'])->toBe('test/test')
         ->and($versions['2.0.0']['require'])->toBe(['php' => '^8.4']);
@@ -649,10 +683,10 @@ it('expands Composer 2 minified metadata before mirroring it', function (): void
 it('refreshes an archive when its stable distribution reference changes', function (): void {
     Storage::fake();
     $repository = Repository::factory()->root()->create();
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     $package = Package::factory()->for($repository)->create([
         'name' => 'test/test',
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
     ]);
     $archive = file_get_contents(__DIR__.'/../Fixtures/project.zip');
     assertNotNull($archive);
@@ -676,20 +710,20 @@ it('refreshes an archive when its stable distribution reference changes', functi
         return Http::response($archive, 200, ['content-type' => 'application/zip']);
     });
 
-    app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream']));
+    app(SynchronizeComposerPackage::class)->handle($package->fresh(['source']));
     $reference = 'release-2';
-    app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream']));
+    app(SynchronizeComposerPackage::class)->handle($package->fresh(['source']));
 
     expect(Http::recorded(fn ($request) => $request->url() === 'https://private.example.test/archive.zip'))->toHaveCount(2);
 });
 
 it('rejects an archive belonging to a different Composer package', function (): void {
     Storage::fake();
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     $repository = Repository::factory()->root()->create();
     $package = Package::factory()->for($repository)->create([
         'name' => 'other/test',
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
     ]);
     $archive = file_get_contents(__DIR__.'/../Fixtures/project.zip');
     assertNotNull($archive);
@@ -703,16 +737,16 @@ it('rejects an archive belonging to a different Composer package', function (): 
         'https://private.example.test/archive.zip' => Http::response($archive),
     ]);
 
-    expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream'])))
+    expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['source'])))
         ->toThrow(RuntimeException::class);
     expect($package->versions()->count())->toBe(0);
 });
 
 it('rejects non-HTTP archive distributions', function (): void {
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     $package = Package::factory()->for(Repository::factory()->root()->create())->create([
         'name' => 'test/test',
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
     ]);
     Http::fake([
         'https://private.example.test/p2/test/test.json' => Http::response([
@@ -723,7 +757,7 @@ it('rejects non-HTTP archive distributions', function (): void {
         ]),
     ]);
 
-    expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream'])))
+    expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['source'])))
         ->toThrow(ComposerUpstreamException::class);
 
     expect($package->versions()->count())->toBe(0);
@@ -732,10 +766,10 @@ it('rejects non-HTTP archive distributions', function (): void {
 
 it('rejects oversized archives before publishing a version', function (): void {
     Storage::fake();
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     $package = Package::factory()->for(Repository::factory()->root()->create())->create([
         'name' => 'test/test',
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
     ]);
     Http::fake([
         'https://private.example.test/p2/test/test.json' => Http::response([
@@ -749,25 +783,25 @@ it('rejects oversized archives before publishing a version', function (): void {
         ]),
     ]);
 
-    expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream'])))
+    expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['source'])))
         ->toThrow(ComposerUpstreamException::class);
 
     expect($package->versions()->count())->toBe(0);
 });
 
 it('rejects oversized metadata responses', function (): void {
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     Http::fake([
         'https://private.example.test/packages.json' => Http::response(['packages' => []], 200, [
             'Content-Length' => '16777217',
         ]),
     ]);
 
-    expect(fn () => $upstream->client()->validate())->toThrow(ComposerUpstreamException::class);
+    expect(fn () => $upstream->composerClient()->validate())->toThrow(ComposerUpstreamException::class);
 });
 
 it('rejects pathological package version counts', function (): void {
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     Http::fake([
         'https://private.example.test/p2/test/test.json' => Http::response([
             'packages' => ['test/test' => array_fill(0, 10_001, [
@@ -776,17 +810,17 @@ it('rejects pathological package version counts', function (): void {
         ]),
     ]);
 
-    expect(fn () => $upstream->client()->package('test/test'))
+    expect(fn () => $upstream->composerClient()->package('test/test'))
         ->toThrow(ComposerUpstreamException::class);
 });
 
 it('publishes no metadata when a later archive fails preflight validation', function (): void {
     Storage::fake();
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     $package = Package::factory()->for(Repository::factory()->root()->create())->create([
         'name' => 'test/test',
         'description' => 'last public snapshot',
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
     ]);
     $firstArchive = composerUpstreamArchive('test/test', '1.0.0');
 
@@ -816,7 +850,7 @@ it('publishes no metadata when a later archive fails preflight validation', func
         'https://private.example.test/2.0.0.zip' => Http::response('invalid archive'),
     ]);
 
-    expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream'])))
+    expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['source'])))
         ->toThrow(ComposerUpstreamException::class);
 
     expect($package->fresh())
@@ -829,11 +863,11 @@ it('publishes no metadata when a later archive fails preflight validation', func
 it('rolls back publication and deletes only staged archives when database publication fails', function (): void {
     Storage::fake();
     Storage::disk()->put('preserved.zip', 'existing archive');
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     $package = Package::factory()->for(Repository::factory()->root()->create())->create([
         'name' => 'test/test',
         'description' => 'last public snapshot',
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
     ]);
     $archives = [
         '1.0.0' => composerUpstreamArchive('test/test', '1.0.0'),
@@ -880,7 +914,7 @@ it('rolls back publication and deletes only staged archives when database public
         }
     };
 
-    expect(fn () => (new SynchronizeComposerPackage($creator))->handle($package->fresh(['composerUpstream'])))
+    expect(fn () => (new SynchronizeComposerPackage($creator))->handle($package->fresh(['source'])))
         ->toThrow(RuntimeException::class, 'Simulated publication failure.');
 
     expect($package->fresh())
@@ -891,11 +925,11 @@ it('rolls back publication and deletes only staged archives when database public
 });
 
 it('keeps the last snapshot and records package health on refresh failure', function (): void {
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     $repository = Repository::factory()->root()->create();
     $package = Package::factory()->for($repository)->create([
         'name' => 'test/test',
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
     ]);
 
     Http::fake([
@@ -915,7 +949,7 @@ it('enrolls Flux and Scramble-shaped provider packages through a real synchroniz
     $user = user(Permission::PACKAGE_CREATE);
     $repository = Repository::factory()->root()->public()->create();
     $user->repositories()->attach($repository);
-    $upstream = ComposerUpstream::factory()->basic('buyer@example.test', 'license')->create([
+    $upstream = Source::factory()->composer()->basic('buyer@example.test', 'license')->create([
         'url' => 'https://paid.example.test',
     ]);
     [$vendor, $package] = explode('/', $name, 2);
@@ -948,13 +982,14 @@ it('enrolls Flux and Scramble-shaped provider packages through a real synchroniz
         return Http::response([], 404);
     });
 
-    postJson("/api/composer-upstreams/{$upstream->id}/packages", [
-        'repository_id' => $repository->id,
+    postJson('/api/packages', [
+        'source' => (string) $upstream->id,
+        'repository' => (string) $repository->id,
         'name' => $name,
-    ])->assertAccepted();
+    ])->assertCreated();
 
     $mirrored = $repository->packageByName($name);
-    expect($mirrored?->composer_upstream_id)->toBe($upstream->id)
+    expect($mirrored?->source_id)->toBe($upstream->id)
         ->and($mirrored?->versions()->count())->toBe(2);
 
     $metadata = getJson($repository->url("/p2/{$vendor}/{$package}.json"))
@@ -973,10 +1008,10 @@ it('enrolls Flux and Scramble-shaped provider packages through a real synchroniz
 it('hides removed upstream versions while preserving their locked archive downloads', function (): void {
     Storage::fake();
     $repository = Repository::factory()->root()->public()->create();
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     $package = Package::factory()->for($repository)->create([
         'name' => 'test/test',
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
     ]);
     $archive = file_get_contents(__DIR__.'/../Fixtures/project.zip');
     assertNotNull($archive);
@@ -1003,12 +1038,12 @@ it('hides removed upstream versions while preserving their locked archive downlo
         return Http::response($archive, 200, ['content-type' => 'application/zip']);
     });
 
-    app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream']));
+    app(SynchronizeComposerPackage::class)->handle($package->fresh(['source']));
     $removedVersion = $package->versions()->where('name', '2.0.0')->firstOrFail();
     $lockedUrl = $repository->archiveUrl($package->name, $removedVersion->name, $removedVersion->shasum);
 
     $includeNewVersion = false;
-    app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream']));
+    app(SynchronizeComposerPackage::class)->handle($package->fresh(['source']));
 
     getJson($repository->url('/p2/test/test.json'))
         ->assertOk()
@@ -1022,10 +1057,10 @@ it('hides removed upstream versions while preserving their locked archive downlo
 it('rejects an empty upstream snapshot without hiding mirrored versions', function (): void {
     Storage::fake();
     $repository = Repository::factory()->root()->public()->create();
-    $upstream = ComposerUpstream::factory()->create(['url' => 'https://private.example.test']);
+    $upstream = Source::factory()->composer()->create(['url' => 'https://private.example.test']);
     $package = Package::factory()->for($repository)->create([
         'name' => 'test/test',
-        'composer_upstream_id' => $upstream->id,
+        'source_id' => $upstream->id,
     ]);
     $archive = file_get_contents(__DIR__.'/../Fixtures/project.zip');
     assertNotNull($archive);
@@ -1043,10 +1078,10 @@ it('rejects an empty upstream snapshot without hiding mirrored versions', functi
         return Http::response($archive, 200, ['content-type' => 'application/zip']);
     });
 
-    app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream']));
+    app(SynchronizeComposerPackage::class)->handle($package->fresh(['source']));
     $versions = [];
 
-    expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['composerUpstream'])))
+    expect(fn () => app(SynchronizeComposerPackage::class)->handle($package->fresh(['source'])))
         ->toThrow(ComposerUpstreamException::class, 'Composer upstream returned invalid package metadata.');
 
     expect($package->versions()->firstOrFail()->upstream_removed_at)->toBeNull()

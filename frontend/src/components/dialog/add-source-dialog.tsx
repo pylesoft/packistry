@@ -24,6 +24,10 @@ export function AddSourceDialog(props: DialogProps) {
             url: '',
             token: '',
             metadata: {},
+            authType: 'none' as const,
+            username: '',
+            password: '',
+            enabled: true,
         },
         onSuccess() {
             form.reset()

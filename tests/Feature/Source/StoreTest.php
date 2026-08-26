@@ -53,4 +53,4 @@ it('stores', function (?User $user, int $status, SourceProvider $provider): void
         ->and(decrypt($source->token))->toBe($token);
 })
     ->with(guestAndUsers(Permission::SOURCE_CREATE, userWithPermission: 201))
-    ->with(SourceProvider::cases());
+    ->with(SourceProvider::vcsCases());

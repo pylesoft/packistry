@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Composer;
 
 use App\CreateFromZip;
+use App\Enums\SourceProvider;
 use App\Exceptions\ComposerUpstreamException;
 use App\Models\Package;
 use App\Normalizer;
@@ -19,13 +20,13 @@ readonly class SynchronizeComposerPackage
     /** @param array<string, mixed>|null $discoveredMetadata */
     public function handle(Package $package, ?array $discoveredMetadata = null): void
     {
-        $upstream = $package->composerUpstream;
-        if ($upstream === null || ! $upstream->enabled) {
+        $upstream = $package->source;
+        if ($upstream === null || $upstream->provider !== SourceProvider::COMPOSER || ! $upstream->enabled) {
             return;
         }
 
         $package->loadMissing(['repository', 'versions']);
-        $client = $upstream->client();
+        $client = $upstream->composerClient();
         $metadata = $discoveredMetadata ?? $client->package($package->name, $package->upstream_etag, $package->upstream_last_modified);
         if (($metadata['not_modified'] ?? false) === true) {
             DB::transaction(function () use ($package): void {

@@ -28,7 +28,7 @@ class AddSource extends Command
 
         $provider = select(
             label: 'Select your provider',
-            options: array_map(fn (SourceProvider $provider) => $provider->value, SourceProvider::cases()),
+            options: array_map(fn (SourceProvider $provider) => $provider->value, SourceProvider::vcsCases()),
             default: app()->isProduction() ? '' : SourceProvider::GITEA->value
         );
 
