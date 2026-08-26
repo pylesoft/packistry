@@ -36,6 +36,7 @@ function PackagesComponent() {
     const downloads = usePackageDownloads(packageId)
     const versions = usePackageVersions(packageId, search)
     const composerSource = query.data?.source?.provider === 'composer' ? query.data.source : undefined
+    const vcsSource = query.data?.source?.provider !== 'composer' ? query.data?.source : undefined
     const canReadBatches = !!composerSource && can(BATCH_READ)
     const batches = useBatches({
         enabled: canReadBatches,
@@ -86,10 +87,10 @@ function PackagesComponent() {
                 ) : (
                     <LoadingRepositoryCard className="h-full" />
                 )}
-                {query.data?.source ? (
+                {vcsSource ? (
                     <SourceCard
                         className="h-full"
-                        source={query.data.source}
+                        source={vcsSource}
                     />
                 ) : (
                     query.data?.source === undefined && <LoadingSourceCard className="h-full" />
