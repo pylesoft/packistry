@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -62,9 +63,9 @@ return new class extends Migration
                     'name' => $source->name,
                     'url' => $source->url,
                     'auth_type' => $authType,
-                    'username' => $authType === 'basic' ? $source->username : null,
-                    'password' => $authType === 'basic' ? $source->password : null,
-                    'token' => $authType === 'bearer' ? $source->token : null,
+                    'username' => $authType === 'basic' ? $this->encryptForLegacyCast($source->username) : null,
+                    'password' => $authType === 'basic' ? $this->encryptForLegacyCast($source->password) : null,
+                    'token' => $authType === 'bearer' ? $this->encryptForLegacyCast($source->token) : null,
                     'enabled' => $source->enabled,
                     'last_checked_at' => $source->last_checked_at,
                     'created_at' => $source->created_at,
@@ -119,5 +120,20 @@ return new class extends Migration
                 throw new RuntimeException('Cannot remove legacy Composer schema while a package mapping is inconsistent.');
             }
         }
+    }
+
+    private function encryptForLegacyCast(?string $encrypted): ?string
+    {
+        if ($encrypted === null) {
+            return null;
+        }
+
+        $decrypted = decrypt($encrypted, false);
+        $serialized = @unserialize($decrypted, ['allowed_classes' => false]);
+        $credential = is_string($serialized) && serialize($serialized) === $decrypted
+            ? $serialized
+            : $decrypted;
+
+        return Crypt::encryptString($credential);
     }
 };

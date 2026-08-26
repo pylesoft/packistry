@@ -6,6 +6,7 @@ use App\Enums\SourceProvider;
 use App\Models\Package;
 use App\Models\Repository;
 use App\Models\Source;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -89,12 +90,12 @@ it('reconstructs legacy Composer data when the cleanup migration is rolled back'
             'none' => expect($legacy->username)->toBeNull()
                 ->and($legacy->password)->toBeNull()
                 ->and($legacy->token)->toBeNull(),
-            'basic' => expect($legacy->username)->toBe($source->getRawOriginal('username'))
-                ->and($legacy->password)->toBe($source->getRawOriginal('password'))
+            'basic' => expect(Crypt::decryptString($legacy->username))->toBe('buyer@example.test')
+                ->and(Crypt::decryptString($legacy->password))->toBe('license-secret')
                 ->and($legacy->token)->toBeNull(),
             'bearer' => expect($legacy->username)->toBeNull()
                 ->and($legacy->password)->toBeNull()
-                ->and($legacy->token)->toBe($source->getRawOriginal('token')),
+                ->and(Crypt::decryptString($legacy->token))->toBe('api-token'),
         };
     }
 
