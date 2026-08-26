@@ -86,14 +86,14 @@ return new class extends Migration
     {
         $upstreamIds = DB::table('composer_upstreams')
             ->pluck('id')
-            ->map(fn (int $id): int => $id)
+            ->map(fn ($id): int => (int) $id)
             ->sort()
             ->values();
 
         $mappedUpstreamIds = DB::table('sources')
             ->whereNotNull('legacy_composer_upstream_id')
             ->pluck('legacy_composer_upstream_id')
-            ->map(fn (int $id): int => $id)
+            ->map(fn ($id): int => (int) $id)
             ->sort()
             ->values();
 
