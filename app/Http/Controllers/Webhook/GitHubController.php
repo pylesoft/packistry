@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Webhook;
 
-use App\Exceptions\VersionNotFoundException;
 use App\Http\Controllers\Webhook\Traits\AuthorizeHubSignatureEvent;
 use App\Sources\GitHub\Event\DeleteEvent;
 use App\Sources\GitHub\Event\PushEvent;
@@ -15,9 +14,6 @@ readonly class GitHubController extends WebhookController
 {
     use AuthorizeHubSignatureEvent;
 
-    /**
-     * @throws VersionNotFoundException
-     */
     public function __invoke(Request $request): JsonResponse
     {
         $this->authorizeWebhook($request);

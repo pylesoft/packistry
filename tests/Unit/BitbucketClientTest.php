@@ -86,7 +86,8 @@ it('fetches project branches', function () {
         ->id()->toBe($this->project->id)
         ->version()->toBe('dev-main')
         ->url()->toBe('https://bitbucket.org/packistry/packistry/branch/main')
-        ->zipUrl()->toBe('https://bitbucket.org/packistry/packistry/get/main.zip');
+        ->zipUrl()->toBe('https://bitbucket.org/packistry/packistry/get/3510152e3671880d483b111a2a66c38f924ac147.zip')
+        ->reference()->toBe('3510152e3671880d483b111a2a66c38f924ac147');
 });
 
 it('fetches project tags', function () {
@@ -109,7 +110,8 @@ it('fetches project tags', function () {
         ->id()->toBe($this->project->id)
         ->version()->toBe('v1.0.0')
         ->url()->toBe('https://bitbucket.org/packistry/packistry/src/v1.0.0')
-        ->zipUrl()->toBe('https://bitbucket.org/packistry/packistry/get/v1.0.0.zip');
+        ->zipUrl()->toBe('https://bitbucket.org/packistry/packistry/get/b075e3a1d5a0ca4f1cfc5dc3a7e6dc187aa9d23a.zip')
+        ->reference()->toBe('b075e3a1d5a0ca4f1cfc5dc3a7e6dc187aa9d23a');
 });
 
 it('creates webhook', function () {

@@ -5,6 +5,9 @@
     "values": [
         {
             "name": "main",
+            "target": {
+                "hash": "3510152e3671880d483b111a2a66c38f924ac147"
+            },
             "links": {
                 "html": {
                     "href": "https://bitbucket.org/packistry/packistry/branch/main"

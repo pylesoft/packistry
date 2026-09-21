@@ -12,9 +12,10 @@ use App\Sources\Bitbucket\Reference;
 use App\Sources\Bitbucket\Repository;
 use App\Sources\Deletable;
 use App\Sources\Importable;
+use App\Sources\ReferenceEvent;
 use RuntimeException;
 
-class PushEvent extends Input implements Deletable, Importable
+class PushEvent extends Input implements Deletable, Importable, ReferenceEvent
 {
     public function __construct(
         public Push $push,

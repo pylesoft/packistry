@@ -9,8 +9,9 @@ use App\Sources\Deletable;
 use App\Sources\Gitlab\Input;
 use App\Sources\Gitlab\Project;
 use App\Sources\Importable;
+use App\Sources\ReferenceEvent;
 
-class PushEvent extends Input implements Deletable, Importable
+class PushEvent extends Input implements Deletable, Importable, ReferenceEvent
 {
     public function __construct(
         public string $ref,

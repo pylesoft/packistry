@@ -3,118 +3,45 @@
 declare(strict_types=1);
 
 use App\Enums\SourceProvider;
-use App\Http\Resources\VersionResource;
+use App\Jobs\ReconcilePushedReference;
 use App\Models\Package;
 use App\Models\Repository;
-use App\Models\Version;
+use Illuminate\Support\Facades\Queue;
 
-it('creates prefixed dev version for new branch (feature -> dev-feature)', function (Repository $repository, SourceProvider $provider, ...$args): void {
-    /** @var Package $package */
+it('queues branch reconciliation', function (Repository $repository, SourceProvider $provider, ...$args): void {
+    Queue::fake();
+
     $package = Package::factory()
         ->for($repository)
         ->name('vendor/test')
         ->provider($provider)
         ->create();
 
-    $response = webhook($repository, $package->source, ...$args)
-        ->assertCreated();
+    webhook($repository, $package->source, ...$args)
+        ->assertAccepted();
 
-    /** @var Version $version */
-    $version = Version::query()->latest('id')->first();
-
-    $response->assertExactJson(resourceAsJson(new VersionResource($version)));
-
-    expect($version)->name->toBe('dev-feature');
+    Queue::assertPushed(
+        ReconcilePushedReference::class,
+        fn (ReconcilePushedReference $job): bool => $job->package->is($package)
+            && $job->reference === 'feature/my-feature'
+            && $job->isTag === false
+    );
 })
     ->with(rootAndSubRepository())
     ->with(providerPushEvents(
         refType: 'heads',
-        ref: 'feature',
+        ref: 'feature/my-feature',
     ));
 
-it('creates suffixed dev version for new version branch (7.3 -> 7.3.x-dev)', function (Repository $repository, SourceProvider $provider, ...$args): void {
-    /** @var Package $package */
-    $package = Package::factory()
-        ->for($repository)
-        ->name('vendor/test')
-        ->provider($provider)
-        ->create();
+it('queues reconciliation for the matching repository package', function (Repository $repository, SourceProvider $provider, ...$args): void {
+    Queue::fake();
 
-    $response = webhook($repository, $package->source, ...$args)
-        ->assertCreated();
-
-    /** @var Version $version */
-    $version = Version::query()->latest('id')->first();
-
-    $response->assertExactJson(resourceAsJson(new VersionResource($version)));
-
-    expect($version)->name->toBe('7.3.x-dev');
-})
-    ->with(rootAndSubRepository())
-    ->with(providerPushEvents(
-        refType: 'heads',
-        ref: '7.3',
-    ));
-
-it('creates suffixed dev version for new version branch (7.3.x -> 7.3.x-dev)', function (Repository $repository, SourceProvider $provider, ...$args): void {
-    /** @var Package $package */
-    $package = Package::factory()
-        ->for($repository)
-        ->name('vendor/test')
-        ->provider($provider)
-        ->create();
-
-    $response = webhook($repository, $package->source, ...$args)
-        ->assertCreated();
-
-    /** @var Version $version */
-    $version = Version::query()->latest('id')->first();
-
-    $response->assertExactJson(resourceAsJson(new VersionResource($version)));
-
-    expect($version)->name->toBe('7.3.x-dev');
-})
-    ->with(rootAndSubRepository())
-    ->with(providerPushEvents(
-        refType: 'heads',
-        ref: '7.3.x',
-    ));
-
-it('creates suffixed dev version for new version branch (v3 -> v3.x-dev)', function (Repository $repository, SourceProvider $provider, ...$args): void {
-    /** @var Package $package */
-    $package = Package::factory()
-        ->for($repository)
-        ->name('vendor/test')
-        ->provider($provider)
-        ->create();
-
-    $response = webhook($repository, $package->source, ...$args)
-        ->assertCreated();
-
-    /** @var Version $version */
-    $version = Version::query()->latest('id')->first();
-
-    $response->assertExactJson(resourceAsJson(new VersionResource($version)));
-
-    expect($version)->name->toBe('v3.x-dev');
-})
-    ->with(rootAndSubRepository())
-    ->with(providerPushEvents(
-        refType: 'heads',
-        ref: 'v3',
-    ));
-
-it('creates dev version for correct repository', function (Repository $repository, SourceProvider $provider, ...$args): void {
-    $otherRepo = Repository::factory()->create();
-
-    /** @var Package $otherPackage */
     $otherPackage = Package::factory()
-        ->for($otherRepo)
+        ->for(Repository::factory())
         ->name('vendor/test')
         ->provider($provider)
         ->create();
 
-    /** @var Package $package */
     $package = Package::factory()
         ->for($repository)
         ->name('vendor/test')
@@ -124,48 +51,13 @@ it('creates dev version for correct repository', function (Repository $repositor
         ])
         ->create();
 
-    $response = webhook($repository, $package->source, ...$args)
-        ->assertCreated();
+    webhook($repository, $package->source, ...$args)
+        ->assertAccepted();
 
-    /** @var Version $version */
-    $version = Version::query()->latest('id')->first();
-
-    $response->assertExactJson(resourceAsJson(new VersionResource($version)));
-
-    expect($version->package_id)->toBe($package->id);
+    Queue::assertPushed(
+        ReconcilePushedReference::class,
+        fn (ReconcilePushedReference $job): bool => $job->package->is($package)
+    );
 })
     ->with(rootAndSubRepository())
-    ->with(providerPushEvents(
-        refType: 'heads'
-    ));
-
-it('overwrites dev version for same branch', function (Repository $repository, SourceProvider $provider, ...$args): void {
-    $package = Package::factory()
-        ->name('vendor/test')
-        ->for($repository)
-        ->provider($provider)
-        ->create();
-
-    $originalVersion = Version::factory()
-        ->for($package)
-        ->fromDefaultZip(
-            version: 'dev-feature'
-        )
-        ->create();
-
-    $response = webhook($repository, $package->source, ...$args)
-        ->assertCreated();
-
-    /** @var Version $version */
-    $version = Version::query()->latest('id')->first();
-
-    $response->assertExactJson(resourceAsJson(new VersionResource($version)));
-
-    expect($version->is($originalVersion))
-        ->toBeTrue();
-})
-    ->with(rootAndSubRepository())
-    ->with(providerPushEvents(
-        refType: 'heads',
-        ref: 'feature'
-    ));
+    ->with(providerPushEvents(refType: 'heads'));

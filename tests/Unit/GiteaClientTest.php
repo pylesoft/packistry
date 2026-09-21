@@ -79,7 +79,8 @@ it('can fetch project branches', function () {
         ->id()->toBe('35024')
         ->version()->toBe('dev-main')
         ->url()->toBe('https://gitea.com')
-        ->zipUrl()->toBe('https://gitea.com/gitea/act_runner/archive/main.zip');
+        ->zipUrl()->toBe('https://gitea.com/gitea/act_runner/archive/3510152e3671880d483b111a2a66c38f924ac147.zip')
+        ->reference()->toBe('3510152e3671880d483b111a2a66c38f924ac147');
 });
 
 it('can fetch project tags', function () {
@@ -103,5 +104,6 @@ it('can fetch project tags', function () {
         ->id()->toBe('35024')
         ->version()->toBe('v0.2.11')
         ->url()->toBe('https://gitea.com')
-        ->zipUrl()->toBe('https://gitea.com/gitea/act_runner/archive/v0.2.11.zip');
+        ->zipUrl()->toBe('https://gitea.com/gitea/act_runner/archive/b075e3a1d5a0ca4f1cfc5dc3a7e6dc187aa9d23a.zip')
+        ->reference()->toBe('b075e3a1d5a0ca4f1cfc5dc3a7e6dc187aa9d23a');
 });

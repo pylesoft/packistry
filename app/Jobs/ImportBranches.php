@@ -6,7 +6,7 @@ namespace App\Jobs;
 
 use App\Models\Package;
 use App\Models\Source;
-use App\Sources\Importable;
+use App\Sources\Branch;
 use App\Sources\Project;
 use Illuminate\Bus\Batchable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -30,11 +30,12 @@ class ImportBranches implements ShouldQueue
         $batch = $this->batch();
 
         $this->source->vcsClient()->branches($this->project)
-            ->each(function (Importable $branch) use ($batch): void {
-                $batch?->add(new ImportImportable(
+            ->each(function (Branch $branch) use ($batch): void {
+                $batch?->add(new ReconcilePushedReference(
                     $this->source,
                     $this->package,
-                    $branch,
+                    $branch->name,
+                    false,
                 ));
             });
     }

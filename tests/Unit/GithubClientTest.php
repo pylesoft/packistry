@@ -119,7 +119,8 @@ it('fetches project tags', function () {
         ->id->toBe("{$this->project->id}")
         ->name->toBe('v0.11.0')
         ->url->toBe(Normalizer::url($this->project->webUrl))
-        ->zipUrl->toBe('https://api.github.com/repos/packistry/packistry/zipball/refs/tags/v0.11.0');
+        ->zipUrl->toBe('https://api.github.com/repos/packistry/packistry/zipball/12fbdacf217db460ea8f1f8a1ba703bced1d53f0')
+        ->reference->toBe('12fbdacf217db460ea8f1f8a1ba703bced1d53f0');
 });
 
 it('fetches project branches', function () {
@@ -147,7 +148,8 @@ it('fetches project branches', function () {
         ->id->toBe("{$this->project->id}")
         ->name->toBe('favicon')
         ->url->toBe(Normalizer::url($this->project->webUrl))
-        ->zipUrl->toBe("{$this->project->url}/zipball/refs/heads/favicon");
+        ->zipUrl->toBe("{$this->project->url}/zipball/18513692e6f610369a3339fb7fb9c7c4b3491b85")
+        ->reference->toBe('18513692e6f610369a3339fb7fb9c7c4b3491b85');
 });
 
 it('creates webhook', function () {
