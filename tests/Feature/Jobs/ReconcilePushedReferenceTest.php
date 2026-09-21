@@ -11,6 +11,38 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 
+it('serializes imports for the same package version', function (): void {
+    $package = Package::factory()
+        ->for(Repository::factory())
+        ->name('jamie/test')
+        ->provider(SourceProvider::GITHUB, '867865331')
+        ->create();
+
+    $first = new ReconcilePushedReference($package->source, $package, 'favicon', false);
+    $second = new ReconcilePushedReference($package->source, $package, 'favicon', false);
+    [$firstMiddleware] = $first->middleware();
+    [$secondMiddleware] = $second->middleware();
+    $blockedJob = new class
+    {
+        public ?int $releasedAfter = null;
+
+        public function release(int $delay): void
+        {
+            $this->releasedAfter = $delay;
+        }
+    };
+    $secondRan = false;
+
+    $firstMiddleware->handle($first, function () use ($secondMiddleware, $blockedJob, &$secondRan): void {
+        $secondMiddleware->handle($blockedJob, function () use (&$secondRan): void {
+            $secondRan = true;
+        });
+    });
+
+    expect($blockedJob->releasedAfter)->toBe(60)
+        ->and($secondRan)->toBeFalse();
+});
+
 it('converges stale rebuild jobs on the current branch commit', function (): void {
     Http::fake([
         'https://api.github.com/repositories/867865331' => Http::response(
