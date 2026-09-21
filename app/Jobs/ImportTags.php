@@ -31,7 +31,7 @@ class ImportTags implements ShouldQueue
 
         $this->source->vcsClient()->tags($this->project)
             ->each(function (Tag $tag) use ($batch): void {
-                $batch?->add(new ReconcilePushedReference(
+                $batch?->add(new ReconcileReference(
                     $this->source,
                     $this->package,
                     $tag->name,

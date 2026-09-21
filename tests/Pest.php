@@ -26,12 +26,11 @@ use App\Sources\Bitbucket\Link;
 use App\Sources\Bitbucket\Links;
 use App\Sources\Bitbucket\Push;
 use App\Sources\Bitbucket\Reference;
-use App\Sources\Deletable;
 use App\Sources\Gitea\Event\DeleteEvent;
 use App\Sources\Gitea\Event\PushEvent;
 use App\Sources\Gitea\Repository as GiteaRepository;
 use App\Sources\Gitlab\Project;
-use App\Sources\Importable;
+use App\Sources\ReferenceEvent;
 use Database\Factories\RepositoryFactory;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\JsonResponse;
@@ -361,7 +360,7 @@ function guestAndTokens(
 /**
  * @return array<string, mixed>
  */
-function giteaEventHeaders(Importable|Deletable $event, string $secret = 'secret'): array
+function giteaEventHeaders(ReferenceEvent $event, string $secret = 'secret'): array
 {
     $eventType = match ($event::class) {
         PushEvent::class => 'push',
@@ -375,7 +374,7 @@ function giteaEventHeaders(Importable|Deletable $event, string $secret = 'secret
 /**
  * @return array<string, mixed>
  */
-function githubEventHeaders(Importable|Deletable $event, string $secret = 'secret'): array
+function githubEventHeaders(ReferenceEvent $event, string $secret = 'secret'): array
 {
     $eventType = match ($event::class) {
         App\Sources\GitHub\Event\PushEvent::class => 'push',
@@ -389,7 +388,7 @@ function githubEventHeaders(Importable|Deletable $event, string $secret = 'secre
 /**
  * @return array<string, mixed>
  */
-function bitbucketEventHeaders(Importable|Deletable $event, string $secret = 'secret'): array
+function bitbucketEventHeaders(ReferenceEvent $event, string $secret = 'secret'): array
 {
     $eventType = match ($event::class) {
         App\Sources\Bitbucket\Event\PushEvent::class => 'repo:push',
@@ -402,7 +401,7 @@ function bitbucketEventHeaders(Importable|Deletable $event, string $secret = 'se
 /**
  * @return array<string, mixed>
  */
-function eventHeaders(Importable|Deletable $event, string $secret = 'secret'): array
+function eventHeaders(ReferenceEvent $event, string $secret = 'secret'): array
 {
     return match ($event::class) {
         PushEvent::class, DeleteEvent::class => giteaEventHeaders($event, $secret),
@@ -449,7 +448,6 @@ function providerPushEvents(string $refType = 'tags', string $ref = '1.0.0'): ar
                     url: 'https://gitea.com/api/v1/repos/vendor/test',
                 )
             ),
-            'archivePath' => __DIR__.'/Fixtures/gitea-jamie-test.zip',
         ],
         'github' => [
             'provider' => SourceProvider::GITHUB,
@@ -463,7 +461,6 @@ function providerPushEvents(string $refType = 'tags', string $ref = '1.0.0'): ar
                     url: 'https://api.github.com/repos/vendor/test',
                 )
             ),
-            'archivePath' => __DIR__.'/Fixtures/gitea-jamie-test.zip',
         ],
         'gitlab' => [
             'provider' => SourceProvider::GITLAB,
@@ -479,7 +476,6 @@ function providerPushEvents(string $refType = 'tags', string $ref = '1.0.0'): ar
                     webUrl: 'https://gitlab.com/group/test',
                 )
             ),
-            'archivePath' => __DIR__.'/Fixtures/gitlab-jamie-test.zip',
         ],
         'bitbucket' => [
             'provider' => SourceProvider::BITBUCKET,
@@ -509,31 +505,16 @@ function providerPushEvents(string $refType = 'tags', string $ref = '1.0.0'): ar
                     )
                 )
             ),
-            'archivePath' => __DIR__.'/Fixtures/gitlab-jamie-test.zip',
         ],
     ];
-}
-
-function fakeZipArchiveDownload(Importable $event, string $archivePath): void
-{
-    /** @var string $content */
-    $content = file_get_contents($archivePath);
-
-    Http::fake([
-        $event->zipUrl() => Http::response($content, headers: ['content-type' => 'application/zip']),
-    ]);
 }
 
 /**
  * @return TestResponse<JsonResponse>
  */
-function webhook(Repository $repository, ?Source $source, (Importable&Data)|(Deletable&Data) $event, ?string $archivePath = null): TestResponse
+function webhook(Repository $repository, ?Source $source, ReferenceEvent&Data $event): TestResponse
 {
     assertNotNull($source);
-
-    if (! is_null($archivePath) && $event instanceof Importable) {
-        fakeZipArchiveDownload($event, $archivePath);
-    }
 
     return postJson($repository->url("/incoming/{$source->provider->value}/$source->id"), $event->toArray(), eventHeaders($event));
 }

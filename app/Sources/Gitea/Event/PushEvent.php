@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 namespace App\Sources\Gitea\Event;
 
-use App\Normalizer;
 use App\Sources\Gitea\Input;
 use App\Sources\Gitea\Repository;
-use App\Sources\Importable;
 use App\Sources\ReferenceEvent;
 
-class PushEvent extends Input implements Importable, ReferenceEvent
+class PushEvent extends Input implements ReferenceEvent
 {
     public function __construct(
         public string $ref,
@@ -29,37 +27,8 @@ class PushEvent extends Input implements Importable, ReferenceEvent
         return implode('/', array_slice($parts, 2));
     }
 
-    public function zipUrl(): string
-    {
-        return "{$this->repository->htmlUrl}/archive/{$this->shortRef()}.zip";
-    }
-
-    public function version(): string
-    {
-        if ($this->isTag()) {
-            return $this->shortRef();
-        }
-
-        return Normalizer::devVersion($this->shortRef());
-    }
-
-    public function url(): string
-    {
-        return $this->repository->htmlUrl;
-    }
-
-    public function sourceUrl(): string
-    {
-        return $this->repository->htmlUrl;
-    }
-
     public function id(): string
     {
         return (string) $this->repository->id;
-    }
-
-    public function reference(): string
-    {
-        return $this->shortRef();
     }
 }
