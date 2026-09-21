@@ -9,6 +9,7 @@ use App\Models\Source;
 use App\Normalizer;
 use App\Sources\Branch;
 use App\Sources\Tag;
+use Illuminate\Bus\Batchable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -17,6 +18,7 @@ use RuntimeException;
 
 class ReconcilePushedReference implements ShouldQueue
 {
+    use Batchable;
     use Queueable;
 
     public int $tries = 7;
@@ -59,6 +61,7 @@ class ReconcilePushedReference implements ShouldQueue
 
         $client = $this->source->vcsClient();
         $project = $client->project($this->package->provider_id);
+        // ponytail: re-listing refs prevents stale queued rebuilds; add exact-ref provider lookups if API volume becomes material.
         $references = $this->isTag ? $client->tags($project) : $client->branches($project);
         $reference = $references->first(
             fn (Branch|Tag $candidate): bool => $candidate->name === $this->reference
