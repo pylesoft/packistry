@@ -4,6 +4,9 @@
     "values": [
         {
             "name": "dev",
+            "target": {
+                "hash": "df97923656f5d339e13f3f73a08185c8e0e790cc"
+            },
             "links": {
                 "html": {
                     "href": "https://bitbucket.org/packistry/packistry/branch/dev"

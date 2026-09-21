@@ -99,14 +99,18 @@ class BitbucketClient extends Client
     public function branches(Project $project): LazyCollection
     {
         return $this->lazy("$project->url/refs/branches")
-            ->map(fn (array $item): Branch => new Branch(
-                id: (string) $project->id,
-                name: $item['name'],
-                url: $item['links']['html']['href'],
-                zipUrl: "$project->webUrl/get/{$item['name']}.zip",
-                sourceUrl: $project->webUrl,
-                reference: $item['target']['hash'] ?? null,
-            ));
+            ->map(function (array $item) use ($project): Branch {
+                $reference = $item['target']['hash'];
+
+                return new Branch(
+                    id: (string) $project->id,
+                    name: $item['name'],
+                    url: $item['links']['html']['href'],
+                    zipUrl: "$project->webUrl/get/$reference.zip",
+                    sourceUrl: $project->webUrl,
+                    reference: $reference,
+                );
+            });
     }
 
     /**
@@ -115,14 +119,18 @@ class BitbucketClient extends Client
     public function tags(Project $project): LazyCollection
     {
         return $this->lazy("$project->url/refs/tags")
-            ->map(fn (array $item): Tag => new Tag(
-                id: (string) $project->id,
-                name: $item['name'],
-                url: $item['links']['html']['href'],
-                zipUrl: "$project->webUrl/get/{$item['name']}.zip",
-                sourceUrl: $project->webUrl,
-                reference: $item['target']['hash'] ?? null,
-            ));
+            ->map(function (array $item) use ($project): Tag {
+                $reference = $item['target']['hash'];
+
+                return new Tag(
+                    id: (string) $project->id,
+                    name: $item['name'],
+                    url: $item['links']['html']['href'],
+                    zipUrl: "$project->webUrl/get/$reference.zip",
+                    sourceUrl: $project->webUrl,
+                    reference: $reference,
+                );
+            });
     }
 
     /**

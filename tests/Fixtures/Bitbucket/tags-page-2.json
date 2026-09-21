@@ -4,6 +4,9 @@
     "values": [
         {
             "name": "v0.9.0",
+            "target": {
+                "hash": "7c71c94366ae77ca16665fb71ed1ee12d2e448fb"
+            },
             "links": {
                 "html": {
                     "href": "https://bitbucket.org/packistry/packistry/src/v0.9.0"

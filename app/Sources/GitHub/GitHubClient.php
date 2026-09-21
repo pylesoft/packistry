@@ -61,7 +61,7 @@ class GitHubClient extends Client
                 id: (string) $project->id,
                 name: $item['name'],
                 url: Normalizer::url($project->webUrl),
-                zipUrl: "$project->url/zipball/refs/heads/{$item['name']}",
+                zipUrl: "$project->url/zipball/{$item['commit']['sha']}",
                 sourceUrl: $project->webUrl,
                 reference: $item['commit']['sha'] ?? null,
             ));
@@ -77,7 +77,7 @@ class GitHubClient extends Client
                 id: (string) $project->id,
                 name: $item['name'],
                 url: Normalizer::url($project->webUrl),
-                zipUrl: $item['zipball_url'],
+                zipUrl: "$project->url/zipball/{$item['commit']['sha']}",
                 sourceUrl: $project->webUrl,
                 reference: $item['commit']['sha'] ?? null,
             ));

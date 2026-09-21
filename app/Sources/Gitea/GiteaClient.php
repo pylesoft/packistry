@@ -51,14 +51,18 @@ class GiteaClient extends Client
     public function branches(Project $project): LazyCollection
     {
         return $this->lazy("$project->url/branches")
-            ->map(fn (array $item): Branch => new Branch(
-                id: (string) $project->id,
-                name: $item['name'],
-                url: Normalizer::url($project->webUrl),
-                zipUrl: "$project->webUrl/archive/{$item['name']}.zip",
-                sourceUrl: $project->webUrl,
-                reference: $item['commit']['id'] ?? null,
-            ));
+            ->map(function (array $item) use ($project): Branch {
+                $reference = $item['commit']['id'];
+
+                return new Branch(
+                    id: (string) $project->id,
+                    name: $item['name'],
+                    url: Normalizer::url($project->webUrl),
+                    zipUrl: "$project->webUrl/archive/$reference.zip",
+                    sourceUrl: $project->webUrl,
+                    reference: $reference,
+                );
+            });
     }
 
     /**
@@ -67,14 +71,18 @@ class GiteaClient extends Client
     public function tags(Project $project): LazyCollection
     {
         return $this->lazy("$project->url/tags")
-            ->map(fn (array $item): Tag => new Tag(
-                id: (string) $project->id,
-                name: $item['name'],
-                url: Normalizer::url($project->webUrl),
-                zipUrl: $item['zipball_url'],
-                sourceUrl: $project->webUrl,
-                reference: $item['commit']['id'] ?? null,
-            ));
+            ->map(function (array $item) use ($project): Tag {
+                $reference = $item['commit']['sha'];
+
+                return new Tag(
+                    id: (string) $project->id,
+                    name: $item['name'],
+                    url: Normalizer::url($project->webUrl),
+                    zipUrl: "$project->webUrl/archive/$reference.zip",
+                    sourceUrl: $project->webUrl,
+                    reference: $reference,
+                );
+            });
     }
 
     /**
