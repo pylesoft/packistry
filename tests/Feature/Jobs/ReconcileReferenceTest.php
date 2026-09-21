@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SourceProvider;
+use App\Jobs\ReconcilePushedReference;
 use App\Jobs\ReconcileReference;
 use App\Models\Package;
 use App\Models\Repository;
@@ -11,6 +12,24 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+
+it('can unserialize jobs queued before the worker rename', function (): void {
+    $package = Package::factory()
+        ->for(Repository::factory())
+        ->name('jamie/test')
+        ->provider(SourceProvider::GITHUB, '867865331')
+        ->create();
+
+    $job = unserialize(serialize(new ReconcilePushedReference(
+        $package->source,
+        $package,
+        'favicon',
+        false,
+    )));
+
+    expect($job)->toBeInstanceOf(ReconcileReference::class)
+        ->and($job->reference)->toBe('favicon');
+});
 
 it('serializes imports for the same package version', function (): void {
     $package = Package::factory()
