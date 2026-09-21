@@ -19,8 +19,8 @@ readonly class GitHubController extends WebhookController
         $this->authorizeWebhook($request);
 
         return match ($request->header('X-GitHub-Event')) {
-            'push' => $this->push(PushEvent::from($request)),
-            'delete' => $this->delete(DeleteEvent::from($request)),
+            'push' => $this->reconcile(PushEvent::from($request)),
+            'delete' => $this->reconcile(DeleteEvent::from($request)),
             'ping' => response()->json(status: 204),
             default => response()->json([
                 'event' => ['unknown event type'],

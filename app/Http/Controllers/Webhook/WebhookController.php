@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Webhook;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\ReconcilePushedReference;
+use App\Jobs\ReconcileReference;
 use App\Models\Repository;
 use App\Models\Source;
 use App\Sources\ReferenceEvent;
@@ -45,24 +45,14 @@ abstract readonly class WebhookController extends Controller
         });
     }
 
-    public function push(ReferenceEvent $event): JsonResponse
-    {
-        return $this->reconcile($event);
-    }
-
-    public function delete(ReferenceEvent $event): JsonResponse
-    {
-        return $this->reconcile($event);
-    }
-
-    private function reconcile(ReferenceEvent $event): JsonResponse
+    protected function reconcile(ReferenceEvent $event): JsonResponse
     {
         $package = $this->repository()->packages()
             ->where('source_id', $this->source()->id)
             ->where('provider_id', $event->id())
             ->firstOrFail();
 
-        ReconcilePushedReference::dispatch(
+        ReconcileReference::dispatch(
             $this->source(),
             $package,
             $event->shortRef(),

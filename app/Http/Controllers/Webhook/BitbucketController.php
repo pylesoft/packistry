@@ -18,19 +18,10 @@ readonly class BitbucketController extends WebhookController
         $this->authorizeWebhook($request);
 
         return match ($request->header('X-Event-Key')) {
-            'repo:push' => $this->pushOrDelete(PushEvent::from($request)),
+            'repo:push' => $this->reconcile(PushEvent::from($request)),
             default => response()->json([
                 'event' => ['unknown event type'],
             ], 422)
         };
-    }
-
-    private function pushOrDelete(PushEvent $event): JsonResponse
-    {
-        if ($event->isDelete()) {
-            return $this->delete($event);
-        }
-
-        return $this->push($event);
     }
 }

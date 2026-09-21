@@ -16,7 +16,7 @@ use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
-class ReconcilePushedReference implements ShouldQueue
+class ReconcileReference implements ShouldQueue
 {
     use Batchable;
     use Queueable;
@@ -87,7 +87,7 @@ class ReconcilePushedReference implements ShouldQueue
 
     private function lockKey(): string
     {
-        return "package:{$this->package->id}:version:{$this->version()}";
+        return "package:{$this->package->id}:version:".hash('sha256', $this->version());
     }
 
     private function version(): string

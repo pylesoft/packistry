@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace App\Sources\Gitlab\Event;
 
-use App\Normalizer;
-use App\Sources\Deletable;
 use App\Sources\Gitlab\Input;
 use App\Sources\Gitlab\Project;
-use App\Sources\Importable;
 use App\Sources\ReferenceEvent;
 
-class PushEvent extends Input implements Deletable, Importable, ReferenceEvent
+class PushEvent extends Input implements ReferenceEvent
 {
     public function __construct(
         public string $ref,
@@ -20,11 +17,6 @@ class PushEvent extends Input implements Deletable, Importable, ReferenceEvent
         public ?string $checkoutSha,
         public Project $project,
     ) {}
-
-    public function isDelete(): bool
-    {
-        return $this->checkoutSha === null && $this->after === '0000000000000000000000000000000000000000';
-    }
 
     public function isTag(): bool
     {
@@ -38,37 +30,8 @@ class PushEvent extends Input implements Deletable, Importable, ReferenceEvent
         return implode('/', array_slice($parts, 2));
     }
 
-    public function zipUrl(): string
-    {
-        return "{$this->url()}/api/v4/projects/{$this->project->id}/repository/archive.zip?sha=$this->checkoutSha";
-    }
-
-    public function version(): string
-    {
-        if ($this->isTag()) {
-            return $this->shortRef();
-        }
-
-        return Normalizer::devVersion($this->shortRef());
-    }
-
-    public function url(): string
-    {
-        return Normalizer::url($this->project->webUrl);
-    }
-
-    public function sourceUrl(): string
-    {
-        return $this->project->webUrl;
-    }
-
     public function id(): string
     {
         return (string) $this->project->id;
-    }
-
-    public function reference(): string
-    {
-        return $this->checkoutSha ?? $this->shortRef();
     }
 }

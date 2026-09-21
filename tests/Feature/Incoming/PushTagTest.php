@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SourceProvider;
-use App\Jobs\ReconcilePushedReference;
+use App\Jobs\ReconcileReference;
 use App\Models\Package;
 use App\Models\Repository;
 use Illuminate\Support\Facades\Queue;
@@ -21,8 +21,8 @@ it('queues tag reconciliation', function (Repository $repository, SourceProvider
         ->assertAccepted();
 
     Queue::assertPushed(
-        ReconcilePushedReference::class,
-        fn (ReconcilePushedReference $job): bool => $job->package->is($package)
+        ReconcileReference::class,
+        fn (ReconcileReference $job): bool => $job->package->is($package)
             && $job->reference === 'v1.0.0'
             && $job->isTag === true
     );
