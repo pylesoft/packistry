@@ -31,7 +31,7 @@ class ImportBranches implements ShouldQueue
 
         $this->source->vcsClient()->branches($this->project)
             ->each(function (Branch $branch) use ($batch): void {
-                $batch?->add(new ReconcilePushedReference(
+                $batch?->add(new ReconcileReference(
                     $this->source,
                     $this->package,
                     $branch->name,

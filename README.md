@@ -55,6 +55,8 @@ docker exec -it $(docker ps | grep ":80->" | awk '{print $1}') packistry add:use
 
 Now, open http://localhost in your browser and log in with the newly created user. Note: Webhooks will not be delivered to localhost.
 
+When using SQS, set the queue visibility timeout above Packistry's 3,600-second Composer refresh timeout. The database, Redis, and Beanstalkd connections default to 3,660 seconds.
+
 - Explore the docs at **[https://packistry.github.io/ »](https://packistry.github.io/)** for more options to run Packistry.
 
 ## Dependencies
@@ -86,4 +88,3 @@ Please review [our security policy](./SECURITY.md) on how to report security vul
 ## License
 
 Packistry is open-sourced software licensed under the [GPL-3.0](./LICENSE).
-

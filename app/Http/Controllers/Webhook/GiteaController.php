@@ -19,8 +19,8 @@ readonly class GiteaController extends WebhookController
         $this->authorizeWebhook($request);
 
         return match ($request->header('X-Gitea-Event')) {
-            'push' => $this->push(PushEvent::from($request)),
-            'delete' => $this->delete(DeleteEvent::from($request)),
+            'push' => $this->reconcile(PushEvent::from($request)),
+            'delete' => $this->reconcile(DeleteEvent::from($request)),
             default => response()->json([
                 'event' => ['unknown event type'],
             ], 422)

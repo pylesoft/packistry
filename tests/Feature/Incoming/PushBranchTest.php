@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SourceProvider;
-use App\Jobs\ReconcilePushedReference;
+use App\Jobs\ReconcileReference;
 use App\Models\Package;
 use App\Models\Repository;
 use Illuminate\Support\Facades\Queue;
@@ -21,8 +21,8 @@ it('queues branch reconciliation', function (Repository $repository, SourceProvi
         ->assertAccepted();
 
     Queue::assertPushed(
-        ReconcilePushedReference::class,
-        fn (ReconcilePushedReference $job): bool => $job->package->is($package)
+        ReconcileReference::class,
+        fn (ReconcileReference $job): bool => $job->package->is($package)
             && $job->reference === 'feature/my-feature'
             && $job->isTag === false
     );
@@ -55,8 +55,8 @@ it('queues reconciliation for the matching repository package', function (Reposi
         ->assertAccepted();
 
     Queue::assertPushed(
-        ReconcilePushedReference::class,
-        fn (ReconcilePushedReference $job): bool => $job->package->is($package)
+        ReconcileReference::class,
+        fn (ReconcileReference $job): bool => $job->package->is($package)
     );
 })
     ->with(rootAndSubRepository())

@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 namespace App\Sources\Gitea\Event;
 
-use App\Normalizer;
-use App\Sources\Deletable;
 use App\Sources\Gitea\Input;
 use App\Sources\Gitea\Repository;
 use App\Sources\ReferenceEvent;
 
-class DeleteEvent extends Input implements Deletable, ReferenceEvent
+class DeleteEvent extends Input implements ReferenceEvent
 {
     public function __construct(
         public string $ref,
@@ -27,25 +25,6 @@ class DeleteEvent extends Input implements Deletable, ReferenceEvent
     public function shortRef(): string
     {
         return $this->ref;
-    }
-
-    public function version(): string
-    {
-        if ($this->refType === 'branch') {
-            return "dev-$this->ref";
-        }
-
-        return $this->ref;
-    }
-
-    public function name(): string
-    {
-        return $this->repository->fullName;
-    }
-
-    public function url(): string
-    {
-        return Normalizer::url($this->repository->url);
     }
 
     public function id(): string
