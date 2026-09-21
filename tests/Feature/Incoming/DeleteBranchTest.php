@@ -3,13 +3,15 @@
 declare(strict_types=1);
 
 use App\Enums\SourceProvider;
-use App\Http\Resources\VersionResource;
+use App\Jobs\ReconcilePushedReference;
 use App\Models\Package;
 use App\Models\Repository;
 use App\Models\Version;
+use Illuminate\Support\Facades\Queue;
 
-it('deletes branch', function (Repository $repository, SourceProvider $provider, ...$args): void {
-    /** @var Package $package */
+it('queues branch deletion reconciliation', function (Repository $repository, SourceProvider $provider, ...$args): void {
+    Queue::fake();
+
     $package = Package::factory()
         ->for($repository)
         ->name('vendor/test')
@@ -17,51 +19,17 @@ it('deletes branch', function (Repository $repository, SourceProvider $provider,
         ->provider($provider)
         ->create();
 
-    /** @var Version $version */
-    $version = Version::query()->latest('id')->first();
-
     webhook($repository, $package->source, ...$args)
-        ->assertOk()
-        ->assertExactJson(resourceAsJson(new VersionResource($version)));
+        ->assertAccepted();
 
-    expect(Version::query()->count())->toBe(0);
-})
-    ->with(rootAndSubRepository())
-    ->with(providerDeleteEvents(
-        refType: 'heads',
-        ref: 'feature-something'
-    ));
+    expect($package->versions()->count())->toBe(1);
 
-it('deletes branch from correct repository', function (Repository $repository, SourceProvider $provider, ...$args): void {
-    $otherRepo = Repository::factory()->create();
-
-    /** @var Package $otherPackage */
-    $otherPackage = Package::factory()
-        ->for($otherRepo)
-        ->name('vendor/test')
-        ->has(Version::factory()->name('dev-feature-something'))
-        ->provider($provider)
-        ->create();
-
-    /** @var Package $package */
-    $package = Package::factory()
-        ->for($repository)
-        ->name('vendor/test')
-        ->has(Version::factory()->name('dev-feature-something'))
-        ->state([
-            'provider_id' => $otherPackage->provider_id,
-            'source_id' => $otherPackage->source_id,
-        ])
-        ->create();
-
-    /** @var Version $version */
-    $version = Version::query()->latest('id')->first();
-
-    webhook($repository, $package->source, ...$args)
-        ->assertOk()
-        ->assertExactJson(resourceAsJson(new VersionResource($version)));
-
-    expect(Version::query()->count())->toBe(1);
+    Queue::assertPushed(
+        ReconcilePushedReference::class,
+        fn (ReconcilePushedReference $job): bool => $job->package->is($package)
+            && $job->reference === 'feature-something'
+            && $job->isTag === false
+    );
 })
     ->with(rootAndSubRepository())
     ->with(providerDeleteEvents(

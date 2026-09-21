@@ -38,6 +38,15 @@ it('normalizes version', function (string $url, string $expected): void {
         'rc tag with a dot and v prefix' => ['v1.1.0-beta.2', '1.1.0-beta2'],
     ]);
 
+it('normalizes development branches', function (string $branch, string $expected): void {
+    expect(Normalizer::devVersion($branch))->toBe($expected);
+})->with([
+    'named branch' => ['feature', 'dev-feature'],
+    'numeric branch' => ['7.3', '7.3.x-dev'],
+    'wildcard branch' => ['7.3.x', '7.3.x-dev'],
+    'version-prefixed branch' => ['v3', 'v3.x-dev'],
+]);
+
 it('fails to normalize unsupported versions', function (string $version): void {
     expect(fn (): string => Normalizer::version($version))
         ->toThrow(VersionNotFoundException::class);

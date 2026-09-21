@@ -4,18 +4,13 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Webhook;
 
-use App\Exceptions\VersionNotFoundException;
 use App\Http\Controllers\Controller;
-use App\Http\Resources\VersionResource;
+use App\Jobs\ReconcilePushedReference;
 use App\Models\Repository;
 use App\Models\Source;
-use App\Normalizer;
-use App\Sources\Deletable;
-use App\Sources\Importable;
-use Illuminate\Http\Client\ConnectionException;
+use App\Sources\ReferenceEvent;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
 
 abstract readonly class WebhookController extends Controller
 {
@@ -50,59 +45,30 @@ abstract readonly class WebhookController extends Controller
         });
     }
 
-    public function push(Importable $event): JsonResponse
+    public function push(ReferenceEvent $event): JsonResponse
     {
-        $package = $this->repository()->packages()
-            ->where('source_id', $this->source()->id)
-            ->where('provider_id', $event->id())
-            ->firstOrFail();
-
-        $client = $package->source?->vcsClient();
-
-        if (is_null($client)) {
-            return response()->json([
-                'archive' => ['Failed to resolve client for package'],
-            ], 422);
-        }
-
-        try {
-            $version = $client->import(
-                $package,
-                importable: $event,
-            );
-        } catch (ConnectionException $e) {
-            return response()->json([
-                'archive' => ['connection failed', $e->getMessage()],
-            ], 422);
-        }
-
-        return response()->json(
-            new VersionResource($version),
-            201
-        );
+        return $this->reconcile($event);
     }
 
-    /**
-     * @throws VersionNotFoundException
-     */
-    public function delete(Deletable $event): JsonResponse
+    public function delete(ReferenceEvent $event): JsonResponse
+    {
+        return $this->reconcile($event);
+    }
+
+    private function reconcile(ReferenceEvent $event): JsonResponse
     {
         $package = $this->repository()->packages()
             ->where('source_id', $this->source()->id)
             ->where('provider_id', $event->id())
             ->firstOrFail();
 
-        $version = $package
-            ->versions()
-            ->where('name', Normalizer::version($event->version()))
-            ->firstOrFail();
-
-        Storage::disk()->delete($version->archivePaths()->all());
-
-        $version->delete();
-
-        return response()->json(
-            new VersionResource($version)
+        ReconcilePushedReference::dispatch(
+            $this->source(),
+            $package,
+            $event->shortRef(),
+            $event->isTag(),
         );
+
+        return response()->json(status: 202);
     }
 }

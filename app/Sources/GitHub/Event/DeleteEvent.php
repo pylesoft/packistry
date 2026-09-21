@@ -8,8 +8,9 @@ use App\Normalizer;
 use App\Sources\Deletable;
 use App\Sources\GitHub\Input;
 use App\Sources\GitHub\Repository;
+use App\Sources\ReferenceEvent;
 
-class DeleteEvent extends Input implements Deletable
+class DeleteEvent extends Input implements Deletable, ReferenceEvent
 {
     public function __construct(
         public string $ref,
@@ -17,6 +18,16 @@ class DeleteEvent extends Input implements Deletable
         public string $pusherType,
         public Repository $repository,
     ) {}
+
+    public function isTag(): bool
+    {
+        return $this->refType === 'tag';
+    }
+
+    public function shortRef(): string
+    {
+        return $this->ref;
+    }
 
     public function version(): string
     {

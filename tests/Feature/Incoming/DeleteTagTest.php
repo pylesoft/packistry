@@ -3,28 +3,29 @@
 declare(strict_types=1);
 
 use App\Enums\SourceProvider;
-use App\Http\Resources\VersionResource;
+use App\Jobs\ReconcilePushedReference;
 use App\Models\Package;
 use App\Models\Repository;
-use App\Models\Version;
+use Illuminate\Support\Facades\Queue;
 
-it('deletes tag', function (Repository $repository, SourceProvider $provider, ...$args): void {
+it('queues tag deletion reconciliation', function (Repository $repository, SourceProvider $provider, ...$args): void {
+    Queue::fake();
+
     $package = Package::factory()
         ->for($repository)
         ->name('vendor/test')
         ->provider($provider)
         ->create();
 
-    $version = Version::factory()
-        ->for($package)
-        ->name('1.0.0')
-        ->create();
-
     webhook($repository, $package->source, ...$args)
-        ->assertOk()
-        ->assertExactJson(resourceAsJson(new VersionResource($version)));
+        ->assertAccepted();
 
-    expect(Version::query()->count())->toBe(0);
+    Queue::assertPushed(
+        ReconcilePushedReference::class,
+        fn (ReconcilePushedReference $job): bool => $job->package->is($package)
+            && $job->reference === '1.0.0'
+            && $job->isTag === true
+    );
 })
     ->with(rootAndSubRepository())
     ->with(providerDeleteEvents());

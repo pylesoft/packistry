@@ -8,8 +8,9 @@ use App\Normalizer;
 use App\Sources\GitHub\Input;
 use App\Sources\GitHub\Repository;
 use App\Sources\Importable;
+use App\Sources\ReferenceEvent;
 
-class PushEvent extends Input implements Importable
+class PushEvent extends Input implements Importable, ReferenceEvent
 {
     public function __construct(
         public string $ref,
