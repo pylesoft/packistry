@@ -9,6 +9,7 @@ use App\Enums\TokenAbility;
 use App\Models\Repository;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use LogicException;
 
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 
@@ -19,6 +20,10 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        if ($this->command === null) {
+            throw new LogicException('This seeder requires an Artisan command.');
+        }
+
         $email = $this->command->ask('Admin email?');
         $name = $this->command->ask('Admin name?');
         $password = $this->command->ask('Admin password?');
