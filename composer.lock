@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "672c1db25e1411fd7e2498c8bb0894af",
+    "content-hash": "348a9b5dd97040ba6861d647c4dc8bb9",
     "packages": [
         {
             "name": "aws/aws-crt-php",
@@ -11301,7 +11301,8 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-04-29T13:31:09+00:00"
+            "time": "2026-04-29T13:31:09+00:00",
+            "published-time": "2026-04-29T13:31:23+00:00"
         },
         {
             "name": "phpstan/phpstan-deprecation-rules",
@@ -13668,7 +13669,7 @@
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
-        "php": "^8.4",
+        "php": "^8.4.1",
         "ext-curl": "*",
         "ext-pdo": "*",
         "ext-zip": "*"
