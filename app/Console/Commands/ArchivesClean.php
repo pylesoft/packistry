@@ -18,7 +18,7 @@ class ArchivesClean extends Command
 
     public function handle(): int
     {
-        $dryRun = $this->option('dry-run');
+        $dryRun = (bool) $this->option('dry-run');
 
         $repositories = Repository::query()
             ->with('packages.versions.archives')
